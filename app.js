@@ -29,7 +29,6 @@ const ROULETTE_COLORS = ['#f43f5e', '#fbbf24', '#10b981', '#8b5cf6', '#3b82f6', 
 const photoGalleries = {};
 let lightboxPhotos = [];
 let lightboxIndex = 0;
-let inviteRequired = false;
 let currentUser = null;
 
 const nativeFetch = window.fetch.bind(window);
@@ -73,10 +72,7 @@ function showApp() {
 
 async function initApp() {
     const statusRes = await fetch(`${API}/auth/status`);
-    const status = await statusRes.json();
-    inviteRequired = !!status.inviteRequired;
-    const inviteEl = document.getElementById('register-invite');
-    if (inviteEl) inviteEl.classList.toggle('hidden', !inviteRequired);
+    await statusRes.json();
 
     const token = localStorage.getItem('authToken');
     if (!token) {
@@ -119,12 +115,17 @@ async function login() {
 }
 
 async function register() {
+    const inviteCode = document.getElementById('register-invite').value.trim();
+    if (!inviteCode) {
+        showAuthError('Davet kodu gerekli');
+        return;
+    }
     const body = {
         email: document.getElementById('register-email').value.trim(),
         password: document.getElementById('register-password').value,
         coupleName1: document.getElementById('register-name1').value.trim(),
         coupleName2: document.getElementById('register-name2').value.trim(),
-        inviteCode: document.getElementById('register-invite').value.trim()
+        inviteCode
     };
     const res = await fetch(`${API}/auth/register`, {
         method: 'POST',

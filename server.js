@@ -129,7 +129,7 @@ function requireAuth(req, res, next) {
 app.get('/auth/status', (req, res) => {
     res.json({
         multiUser: true,
-        inviteRequired: !!userStore.INVITE_CODE
+        inviteRequired: true
     });
 });
 

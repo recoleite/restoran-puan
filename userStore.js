@@ -7,7 +7,7 @@ const USERS_DIR = path.join(DATA_DIR, 'users');
 const USERS_INDEX = path.join(USERS_DIR, 'index.json');
 const LEGACY_DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 const JWT_SECRET = process.env.JWT_SECRET || 'restoran-puan-dev-secret-change-me';
-const INVITE_CODE = process.env.INVITE_CODE || '';
+const INVITE_CODE = process.env.INVITE_CODE || 'reconisa2026';
 
 function ensureDirs() {
     if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
@@ -173,8 +173,7 @@ function migrateLegacyDataIfNeeded(migrateRestaurant) {
 }
 
 function checkInviteCode(code) {
-    if (!INVITE_CODE) return true;
-    return code === INVITE_CODE;
+    return (code || '').trim() === INVITE_CODE;
 }
 
 function sanitizeUser(user) {
