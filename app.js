@@ -29,16 +29,36 @@ const ROULETTE_COLORS = ['#f43f5e', '#fbbf24', '#10b981', '#8b5cf6', '#3b82f6', 
 const photoGalleries = {};
 let lightboxPhotos = [];
 let lightboxIndex = 0;
+let inviteRequired = false;
+let currentUser = null;
+
+const nativeFetch = window.fetch.bind(window);
+window.fetch = (url, options = {}) => {
+    const headers = new Headers(options.headers || {});
+    const token = localStorage.getItem('authToken');
+    if (typeof url === 'string' && !url.startsWith('http') && token) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+    return nativeFetch(url, { ...options, headers });
+};
 
 // --- AUTH ---
-async function initApp() {
-    const res = await fetch(`${API}/auth/status`);
-    const { authEnabled } = await res.json();
-    await loadSettings();
-    if (authEnabled && !localStorage.getItem('restoranAuth')) {
-        document.getElementById('login-screen').classList.remove('hidden');
-        return;
-    }
+function switchAuthTab(tab) {
+    document.getElementById('auth-tab-login').classList.toggle('active', tab === 'login');
+    document.getElementById('auth-tab-register').classList.toggle('active', tab === 'register');
+    document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
+    document.getElementById('register-form').classList.toggle('hidden', tab !== 'register');
+    document.getElementById('login-error').classList.add('hidden');
+}
+
+function showAuthError(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+function showApp() {
+    document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     setupUI();
     loadRestaurants();
@@ -51,33 +71,87 @@ async function initApp() {
     }
 }
 
+async function initApp() {
+    const statusRes = await fetch(`${API}/auth/status`);
+    const status = await statusRes.json();
+    inviteRequired = !!status.inviteRequired;
+    const inviteEl = document.getElementById('register-invite');
+    if (inviteEl) inviteEl.classList.toggle('hidden', !inviteRequired);
+
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+        document.getElementById('login-screen').classList.remove('hidden');
+        return;
+    }
+
+    const meRes = await fetch(`${API}/auth/me`);
+    if (!meRes.ok) {
+        localStorage.removeItem('authToken');
+        document.getElementById('login-screen').classList.remove('hidden');
+        return;
+    }
+
+    const me = await meRes.json();
+    currentUser = me.user;
+    appSettings = { ...appSettings, ...me.settings };
+    applySettings();
+    showApp();
+}
+
 async function login() {
+    const email = document.getElementById('login-email').value.trim();
     const password = document.getElementById('login-password').value;
     const res = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ email, password })
     });
-    if (res.ok) {
-        localStorage.setItem('restoranAuth', '1');
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('app').classList.remove('hidden');
-        await loadSettings();
-        setupUI();
-        loadRestaurants();
-        loadStats();
-        loadWishlist();
-    } else {
-        document.getElementById('login-error').classList.remove('hidden');
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        showAuthError(data.error || 'Giriş başarısız');
+        return;
     }
+    localStorage.setItem('authToken', data.token);
+    currentUser = data.user;
+    appSettings = { ...appSettings, ...data.settings };
+    applySettings();
+    showApp();
+}
+
+async function register() {
+    const body = {
+        email: document.getElementById('register-email').value.trim(),
+        password: document.getElementById('register-password').value,
+        coupleName1: document.getElementById('register-name1').value.trim(),
+        coupleName2: document.getElementById('register-name2').value.trim(),
+        inviteCode: document.getElementById('register-invite').value.trim()
+    };
+    const res = await fetch(`${API}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        showAuthError(data.error || 'Kayıt başarısız');
+        return;
+    }
+    localStorage.setItem('authToken', data.token);
+    currentUser = data.user;
+    appSettings = { ...appSettings, ...data.settings };
+    applySettings();
+    showApp();
+    showToast('Hoş geldin! 🎉');
 }
 
 function logout() {
+    localStorage.removeItem('authToken');
     localStorage.removeItem('restoranAuth');
     location.reload();
 }
 
 document.getElementById('login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+document.getElementById('register-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') register(); });
 
 // --- SETTINGS ---
 async function loadSettings() {
@@ -160,6 +234,11 @@ function openSettingsModal() {
                 </div>
             </div>
             <button onclick="saveSettings()" class="btn-primary w-full">Kaydet</button>
+            <div class="settings-divider"></div>
+            <div class="text-center">
+                ${currentUser?.email ? `<p class="settings-hint mb-2">${escapeHtml(currentUser.email)}</p>` : ''}
+                <button type="button" onclick="closeModal('settings-modal');logout()" class="btn-logout w-full">Çıkış Yap</button>
+            </div>
         </div>
     </div>`;
     modal.onclick = e => { if (e.target === modal) closeModal('settings-modal'); };

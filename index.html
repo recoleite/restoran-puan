@@ -28,11 +28,28 @@
         <div class="login-card card">
             <div class="login-hearts">💕</div>
             <div class="login-icon">🍽️</div>
-            <h1 id="login-title" class="font-display login-title">Bizim Restoranlarımız</h1>
-            <p id="login-subtitle" class="login-subtitle">Lezzet günlüğünüze hoş geldiniz</p>
-            <input type="password" id="login-password" placeholder="Şifre" class="input login-input">
-            <button onclick="login()" class="btn-primary w-full login-btn">Giriş Yap</button>
-            <p id="login-error" class="text-red-500 text-sm mt-3 hidden">Yanlış şifre</p>
+            <h1 id="login-title" class="font-display login-title">Lezzet Günlüğü</h1>
+            <p id="login-subtitle" class="login-subtitle">Kendi restoran listeni oluştur</p>
+            <div class="auth-tabs">
+                <button type="button" id="auth-tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Giriş</button>
+                <button type="button" id="auth-tab-register" class="auth-tab" onclick="switchAuthTab('register')">Kayıt Ol</button>
+            </div>
+            <div id="login-form" class="auth-form space-y-3">
+                <input type="email" id="login-email" placeholder="E-posta" class="input login-input" autocomplete="email">
+                <input type="password" id="login-password" placeholder="Şifre" class="input login-input" autocomplete="current-password">
+                <button onclick="login()" class="btn-primary w-full login-btn">Giriş Yap</button>
+            </div>
+            <div id="register-form" class="auth-form space-y-3 hidden">
+                <input type="email" id="register-email" placeholder="E-posta" class="input login-input" autocomplete="email">
+                <input type="password" id="register-password" placeholder="Şifre (min. 6)" class="input login-input" autocomplete="new-password">
+                <div class="grid grid-cols-2 gap-2">
+                    <input type="text" id="register-name1" placeholder="Senin adın" class="input">
+                    <input type="text" id="register-name2" placeholder="Partner adı" class="input">
+                </div>
+                <input type="text" id="register-invite" placeholder="Davet kodu" class="input login-input hidden">
+                <button onclick="register()" class="btn-primary w-full login-btn">Hesap Oluştur</button>
+            </div>
+            <p id="login-error" class="text-red-500 text-sm mt-3 hidden"></p>
         </div>
     </div>
 
@@ -48,7 +65,7 @@
                         <button onclick="openShareCardModal()" class="icon-btn" title="Paylaş">📤</button>
                         <button onclick="openRouletteModal()" class="icon-btn" title="Nereye gidelim?">🎲</button>
                         <button onclick="openSettingsModal()" class="icon-btn" title="Ayarlar">⚙️</button>
-                        <button onclick="logout()" class="icon-btn icon-btn-muted" title="Çıkış">↗</button>
+                        <button onclick="logout()" class="icon-btn icon-btn-logout" title="Çıkış Yap">🚪</button>
                     </div>
                 </div>
                 <div class="search-bar mt-3">

@@ -2,10 +2,10 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const userStore = require('./userStore');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DATA_FILE = process.env.DATA_FILE || path.join(__dirname, 'data.json');
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -18,31 +18,8 @@ const DEFAULT_CATEGORIES = () => ({
     price: { my: 3, partner: 3 }
 });
 
-let db = {
-    restaurants: [],
-    wishlist: [],
-    nameRegistry: [],
-    settings: { password: 'bizim123', authEnabled: true, coupleName1: '', coupleName2: '', theme: 'rose' }
-};
-
-if (fs.existsSync(DATA_FILE)) {
-    try {
-        db = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    } catch {
-        db = { restaurants: [], wishlist: [], nameRegistry: [], settings: { password: 'bizim123', authEnabled: true, coupleName1: '', coupleName2: '', theme: 'rose' } };
-    }
-}
-
-if (!db.restaurants) db.restaurants = [];
-if (!db.wishlist) db.wishlist = [];
-if (!db.nameRegistry) db.nameRegistry = [];
-if (!db.settings) db.settings = { password: 'bizim123', authEnabled: true, coupleName1: '', coupleName2: '' };
-if (db.settings.coupleName1 === undefined) db.settings.coupleName1 = '';
-if (db.settings.coupleName2 === undefined) db.settings.coupleName2 = '';
-if (!db.settings.theme) db.settings.theme = 'rose';
-
-function saveToDisk() {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2));
+function persist(req) {
+    userStore.saveUserDb(req.userId, req.db);
 }
 
 const migrateRestaurant = (r) => {
@@ -69,27 +46,24 @@ const migrateRestaurant = (r) => {
     };
 };
 
-db.restaurants = db.restaurants.map(migrateRestaurant);
-saveToDisk();
-
 const clampRating = (val) => Math.min(5, Math.max(1, Math.round(Number(val) || 1)));
 
-const findRestaurant = (id) => db.restaurants.findIndex(r => r.id === id);
+const findRestaurant = (userDb, id) => userDb.restaurants.findIndex(r => r.id === id);
 
-const upsertNameRegistry = (name, cuisine = '', location = '') => {
+const upsertNameRegistry = (userDb, name, cuisine = '', location = '') => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    const existing = db.nameRegistry.findIndex(n => n.name.toLowerCase() === trimmed.toLowerCase());
+    const existing = userDb.nameRegistry.findIndex(n => n.name.toLowerCase() === trimmed.toLowerCase());
     if (existing !== -1) {
-        db.nameRegistry[existing] = {
+        userDb.nameRegistry[existing] = {
             name: trimmed,
-            cuisine: cuisine.trim() || db.nameRegistry[existing].cuisine,
-            location: location.trim() || db.nameRegistry[existing].location
+            cuisine: cuisine.trim() || userDb.nameRegistry[existing].cuisine,
+            location: location.trim() || userDb.nameRegistry[existing].location
         };
     } else {
-        db.nameRegistry.push({ name: trimmed, cuisine: cuisine.trim(), location: location.trim() });
+        userDb.nameRegistry.push({ name: trimmed, cuisine: cuisine.trim(), location: location.trim() });
     }
-    db.nameRegistry.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+    userDb.nameRegistry.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 };
 
 const syncRestaurantFromVisits = (restaurant) => {
@@ -136,31 +110,93 @@ const sortRestaurants = (list, sortBy = 'rating') => {
 };
 
 // --- AUTH ---
+userStore.migrateLegacyDataIfNeeded(migrateRestaurant);
+
+function attachUserDb(req) {
+    req.db = userStore.loadUserDb(req.userId);
+    req.db.restaurants = (req.db.restaurants || []).map(migrateRestaurant);
+}
+
+function requireAuth(req, res, next) {
+    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    const payload = userStore.verifyToken(token);
+    if (!payload) return res.status(401).json({ error: 'Giriş gerekli' });
+    req.userId = payload.userId;
+    attachUserDb(req);
+    next();
+}
+
 app.get('/auth/status', (req, res) => {
-    res.json({ authEnabled: db.settings.authEnabled !== false });
+    res.json({
+        multiUser: true,
+        inviteRequired: !!userStore.INVITE_CODE
+    });
 });
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });
 });
 
-app.post('/auth/login', (req, res) => {
-    const { password } = req.body;
-    if (!db.settings.authEnabled) return res.json({ success: true });
-    if (password === db.settings.password) return res.json({ success: true });
-    res.status(401).json({ error: 'Yanlış şifre' });
+app.post('/auth/register', (req, res) => {
+    try {
+        const { email, password, displayName, coupleName1, coupleName2, inviteCode } = req.body;
+        if (!userStore.checkInviteCode(inviteCode || '')) {
+            return res.status(403).json({ error: 'Geçersiz davet kodu' });
+        }
+        const user = userStore.createUser({ email, password, displayName, coupleName1, coupleName2 });
+        const token = userStore.signToken(user.id);
+        const db = userStore.loadUserDb(user.id);
+        res.status(201).json({
+            token,
+            user: userStore.sanitizeUser(user),
+            settings: db.settings
+        });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
-app.patch('/auth/password', (req, res) => {
-    const { password, newPassword } = req.body;
-    if (db.settings.authEnabled && password !== db.settings.password) {
+app.post('/auth/login', (req, res) => {
+    const { email, password } = req.body;
+    const user = userStore.findUserByEmail(email || '');
+    if (!user || !userStore.verifyPassword(password || '', user.salt, user.passwordHash)) {
+        return res.status(401).json({ error: 'E-posta veya şifre yanlış' });
+    }
+    const token = userStore.signToken(user.id);
+    const db = userStore.loadUserDb(user.id);
+    res.json({
+        token,
+        user: userStore.sanitizeUser(user),
+        settings: db.settings
+    });
+});
+
+app.get('/auth/me', requireAuth, (req, res) => {
+    const user = userStore.findUserById(req.userId);
+    if (!user) return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
+    res.json({
+        user: userStore.sanitizeUser(user),
+        settings: req.db.settings
+    });
+});
+
+app.patch('/auth/password', requireAuth, (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const user = userStore.findUserById(req.userId);
+    if (!user || !userStore.verifyPassword(currentPassword || '', user.salt, user.passwordHash)) {
         return res.status(401).json({ error: 'Mevcut şifre yanlış' });
     }
-    if (newPassword?.trim()) {
-        db.settings.password = newPassword.trim();
-        saveToDisk();
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: 'Yeni şifre en az 6 karakter olmalı' });
     }
+    userStore.updateUserPassword(req.userId, newPassword);
     res.json({ success: true });
+});
+
+const protectedPaths = ['/stats', '/settings', '/backup', '/wishlist', '/timeline', '/names', '/restaurants', '/geocode'];
+app.use((req, res, next) => {
+    if (!protectedPaths.some(p => req.path === p || req.path.startsWith(`${p}/`))) return next();
+    return requireAuth(req, res, next);
 });
 
 // --- GEOCODE ---
@@ -259,16 +295,16 @@ app.get('/geocode', async (req, res) => {
 app.get('/stats', (req, res) => {
     const now = new Date();
     const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const allVisits = db.restaurants.flatMap(r =>
+    const allVisits = req.db.restaurants.flatMap(r =>
         (r.visits || []).map(v => ({ ...v, restaurantName: r.name, restaurantId: r.id }))
     );
     const monthVisits = allVisits.filter(v => v.date?.startsWith(thisMonth)).length;
 
     let topRestaurant = null;
     let topRated = null;
-    if (db.restaurants.length) {
-        topRestaurant = [...db.restaurants].sort((a, b) => b.visitCount - a.visitCount)[0];
-        topRated = [...db.restaurants].sort((a, b) => {
+    if (req.db.restaurants.length) {
+        topRestaurant = [...req.db.restaurants].sort((a, b) => b.visitCount - a.visitCount)[0];
+        topRated = [...req.db.restaurants].sort((a, b) => {
             const avgA = (a.myRating + a.partnerRating) / 2;
             const avgB = (b.myRating + b.partnerRating) / 2;
             return avgB - avgA;
@@ -276,20 +312,20 @@ app.get('/stats', (req, res) => {
     }
 
     const cuisineCounts = {};
-    db.restaurants.forEach(r => {
+    req.db.restaurants.forEach(r => {
         const c = r.cuisine?.trim();
         if (c) cuisineCounts[c] = (cuisineCounts[c] || 0) + 1;
     });
     const topCuisine = Object.entries(cuisineCounts).sort((a, b) => b[1] - a[1])[0];
-    const avgRating = db.restaurants.length
-        ? (db.restaurants.reduce((s, r) => s + (r.myRating + r.partnerRating) / 2, 0) / db.restaurants.length).toFixed(1)
+    const avgRating = req.db.restaurants.length
+        ? (req.db.restaurants.reduce((s, r) => s + (r.myRating + r.partnerRating) / 2, 0) / req.db.restaurants.length).toFixed(1)
         : null;
 
     res.json({
-        restaurantCount: db.restaurants.length,
-        visitCount: db.restaurants.reduce((s, r) => s + (r.visitCount || 0), 0),
-        favoriteCount: db.restaurants.filter(r => r.favorite).length,
-        wishlistCount: db.wishlist.length,
+        restaurantCount: req.db.restaurants.length,
+        visitCount: req.db.restaurants.reduce((s, r) => s + (r.visitCount || 0), 0),
+        favoriteCount: req.db.restaurants.filter(r => r.favorite).length,
+        wishlistCount: req.db.wishlist.length,
         monthVisits,
         avgRating,
         topRestaurant: topRestaurant ? { name: topRestaurant.name, visits: topRestaurant.visitCount } : null,
@@ -301,24 +337,24 @@ app.get('/stats', (req, res) => {
 // --- AYARLAR ---
 app.get('/settings', (req, res) => {
     res.json({
-        coupleName1: db.settings.coupleName1 || '',
-        coupleName2: db.settings.coupleName2 || '',
-        theme: db.settings.theme || 'rose'
+        coupleName1: req.db.settings.coupleName1 || '',
+        coupleName2: req.db.settings.coupleName2 || '',
+        theme: req.db.settings.theme || 'rose'
     });
 });
 
 app.patch('/settings', (req, res) => {
     const { coupleName1, coupleName2, theme } = req.body;
-    if (coupleName1 !== undefined) db.settings.coupleName1 = String(coupleName1).trim();
-    if (coupleName2 !== undefined) db.settings.coupleName2 = String(coupleName2).trim();
+    if (coupleName1 !== undefined) req.db.settings.coupleName1 = String(coupleName1).trim();
+    if (coupleName2 !== undefined) req.db.settings.coupleName2 = String(coupleName2).trim();
     if (theme !== undefined && ['rose', 'dark', 'cream', 'lavender'].includes(theme)) {
-        db.settings.theme = theme;
+        req.db.settings.theme = theme;
     }
-    saveToDisk();
+    persist(req);
     res.json({
-        coupleName1: db.settings.coupleName1,
-        coupleName2: db.settings.coupleName2,
-        theme: db.settings.theme
+        coupleName1: req.db.settings.coupleName1,
+        coupleName2: req.db.settings.coupleName2,
+        theme: req.db.settings.theme
     });
 });
 
@@ -327,10 +363,10 @@ app.get('/backup/export', (req, res) => {
     res.json({
         exportedAt: new Date().toISOString(),
         version: 1,
-        restaurants: db.restaurants,
-        wishlist: db.wishlist,
-        nameRegistry: db.nameRegistry,
-        settings: db.settings
+        restaurants: req.db.restaurants,
+        wishlist: req.db.wishlist,
+        nameRegistry: req.db.nameRegistry,
+        settings: req.db.settings
     });
 });
 
@@ -340,34 +376,29 @@ app.post('/backup/import', (req, res) => {
         return res.status(400).json({ error: 'Geçersiz yedek dosyası' });
     }
 
-    const keepPassword = db.settings.password;
-    const keepAuth = db.settings.authEnabled;
-
-    db.restaurants = data.restaurants.map(migrateRestaurant);
-    db.wishlist = Array.isArray(data.wishlist) ? data.wishlist : [];
-    db.nameRegistry = Array.isArray(data.nameRegistry) ? data.nameRegistry : [];
+    req.db.restaurants = data.restaurants.map(migrateRestaurant);
+    req.db.wishlist = Array.isArray(data.wishlist) ? data.wishlist : [];
+    req.db.nameRegistry = Array.isArray(data.nameRegistry) ? data.nameRegistry : [];
 
     if (data.settings && typeof data.settings === 'object') {
-        db.settings = {
-            password: data.settings.password || keepPassword,
-            authEnabled: data.settings.authEnabled ?? keepAuth,
-            coupleName1: data.settings.coupleName1 ?? '',
-            coupleName2: data.settings.coupleName2 ?? '',
-            theme: ['rose', 'dark', 'cream', 'lavender'].includes(data.settings.theme) ? data.settings.theme : 'rose'
+        req.db.settings = {
+            coupleName1: data.settings.coupleName1 ?? req.db.settings.coupleName1 ?? '',
+            coupleName2: data.settings.coupleName2 ?? req.db.settings.coupleName2 ?? '',
+            theme: ['rose', 'dark', 'cream', 'lavender'].includes(data.settings.theme) ? data.settings.theme : (req.db.settings.theme || 'rose')
         };
     }
 
-    saveToDisk();
+    persist(req);
     res.json({
         success: true,
-        restaurantCount: db.restaurants.length,
-        visitCount: db.restaurants.reduce((s, r) => s + (r.visitCount || 0), 0)
+        restaurantCount: req.db.restaurants.length,
+        visitCount: req.db.restaurants.reduce((s, r) => s + (r.visitCount || 0), 0)
     });
 });
 
 // --- İSTEK LİSTESİ ---
 app.get('/wishlist', (req, res) => {
-    res.json([...db.wishlist].sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || '')));
+    res.json([...req.db.wishlist].sort((a, b) => (b.addedAt || '').localeCompare(a.addedAt || '')));
 });
 
 app.post('/wishlist', (req, res) => {
@@ -383,18 +414,18 @@ app.post('/wishlist', (req, res) => {
         lng: lng ?? null,
         addedAt: new Date().toISOString()
     };
-    db.wishlist.unshift(item);
-    upsertNameRegistry(item.name, item.cuisine, item.location);
-    saveToDisk();
+    req.db.wishlist.unshift(item);
+    upsertNameRegistry(req.db, item.name, item.cuisine, item.location);
+    persist(req);
     res.status(201).json(item);
 });
 
 app.patch('/wishlist/:id', (req, res) => {
-    const index = db.wishlist.findIndex(w => w.id === req.params.id);
+    const index = req.db.wishlist.findIndex(w => w.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Kayıt bulunamadı' });
     const fields = req.body;
-    db.wishlist[index] = {
-        ...db.wishlist[index],
+    req.db.wishlist[index] = {
+        ...req.db.wishlist[index],
         ...(fields.name !== undefined && { name: fields.name.trim() }),
         ...(fields.cuisine !== undefined && { cuisine: fields.cuisine.trim() }),
         ...(fields.location !== undefined && { location: fields.location.trim() }),
@@ -402,22 +433,22 @@ app.patch('/wishlist/:id', (req, res) => {
         ...(fields.lat !== undefined && { lat: fields.lat }),
         ...(fields.lng !== undefined && { lng: fields.lng })
     };
-    saveToDisk();
-    res.json(db.wishlist[index]);
+    persist(req);
+    res.json(req.db.wishlist[index]);
 });
 
 app.delete('/wishlist/:id', (req, res) => {
-    const index = db.wishlist.findIndex(w => w.id === req.params.id);
+    const index = req.db.wishlist.findIndex(w => w.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Kayıt bulunamadı' });
-    db.wishlist.splice(index, 1);
-    saveToDisk();
+    req.db.wishlist.splice(index, 1);
+    persist(req);
     res.json({ success: true });
 });
 
 app.post('/wishlist/:id/visit', (req, res) => {
-    const index = db.wishlist.findIndex(w => w.id === req.params.id);
+    const index = req.db.wishlist.findIndex(w => w.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Kayıt bulunamadı' });
-    const w = db.wishlist[index];
+    const w = req.db.wishlist[index];
     const now = new Date().toISOString();
     const id = Date.now().toString();
     const newRestaurant = {
@@ -447,15 +478,15 @@ app.post('/wishlist/:id/visit', (req, res) => {
         createdAt: now,
         updatedAt: now
     };
-    db.restaurants.unshift(newRestaurant);
-    db.wishlist.splice(index, 1);
-    saveToDisk();
+    req.db.restaurants.unshift(newRestaurant);
+    req.db.wishlist.splice(index, 1);
+    persist(req);
     res.status(201).json(newRestaurant);
 });
 
 // --- ZAMAN ÇİZELGESİ ---
 app.get('/timeline', (req, res) => {
-    const events = db.restaurants.flatMap(r =>
+    const events = req.db.restaurants.flatMap(r =>
         (r.visits || []).map(v => ({
             id: v.id,
             date: v.date,
@@ -477,7 +508,7 @@ app.get('/timeline', (req, res) => {
 // --- İSİM KAYITLARI ---
 app.get('/names', (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
-    let names = db.nameRegistry;
+    let names = req.db.nameRegistry;
     if (search) {
         names = names.filter(n =>
             n.name.toLowerCase().includes(search) ||
@@ -490,7 +521,7 @@ app.get('/names', (req, res) => {
 
 // --- RESTORANLAR ---
 app.get('/restaurants', (req, res) => {
-    let list = [...db.restaurants];
+    let list = [...req.db.restaurants];
     const { search, sort, favorite, cuisine } = req.query;
 
     if (search) {
@@ -508,7 +539,7 @@ app.get('/restaurants', (req, res) => {
 });
 
 app.get('/restaurants/:id', (req, res) => {
-    const restaurant = db.restaurants.find(r => r.id === req.params.id);
+    const restaurant = req.db.restaurants.find(r => r.id === req.params.id);
     if (!restaurant) return res.status(404).json({ error: 'Restoran bulunamadı' });
     res.json(restaurant);
 });
@@ -553,20 +584,20 @@ app.post('/restaurants', (req, res) => {
         updatedAt: now
     };
 
-    db.restaurants.unshift(newRestaurant);
-    upsertNameRegistry(newRestaurant.name, newRestaurant.cuisine, newRestaurant.location);
-    saveToDisk();
+    req.db.restaurants.unshift(newRestaurant);
+    upsertNameRegistry(req.db, newRestaurant.name, newRestaurant.cuisine, newRestaurant.location);
+    persist(req);
     res.status(201).json(newRestaurant);
 });
 
 app.patch('/restaurants/:id', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
-    const current = db.restaurants[index];
+    const current = req.db.restaurants[index];
     const fields = req.body;
 
-    db.restaurants[index] = {
+    req.db.restaurants[index] = {
         ...current,
         ...(fields.name !== undefined && { name: fields.name.trim() }),
         ...(fields.cuisine !== undefined && { cuisine: fields.cuisine.trim() }),
@@ -585,25 +616,25 @@ app.patch('/restaurants/:id', (req, res) => {
         updatedAt: new Date().toISOString()
     };
 
-    syncRestaurantFromVisits(db.restaurants[index]);
-    const updated = db.restaurants[index];
-    upsertNameRegistry(updated.name, updated.cuisine, updated.location);
-    saveToDisk();
+    syncRestaurantFromVisits(req.db.restaurants[index]);
+    const updated = req.db.restaurants[index];
+    upsertNameRegistry(req.db, updated.name, updated.cuisine, updated.location);
+    persist(req);
     res.json(updated);
 });
 
 app.post('/restaurants/:id/favorite', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
-    db.restaurants[index].favorite = !db.restaurants[index].favorite;
-    db.restaurants[index].updatedAt = new Date().toISOString();
-    saveToDisk();
-    res.json(db.restaurants[index]);
+    req.db.restaurants[index].favorite = !req.db.restaurants[index].favorite;
+    req.db.restaurants[index].updatedAt = new Date().toISOString();
+    persist(req);
+    res.json(req.db.restaurants[index]);
 });
 
 // Ziyaret ekle (detaylı)
 app.post('/restaurants/:id/visits', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
     const { date, notes, photos, dishes, budget, tags } = req.body;
@@ -617,44 +648,44 @@ app.post('/restaurants/:id/visits', (req, res) => {
         tags: Array.isArray(tags) ? tags : []
     };
 
-    db.restaurants[index].visits = db.restaurants[index].visits || [];
-    db.restaurants[index].visits.unshift(visit);
-    syncRestaurantFromVisits(db.restaurants[index]);
-    db.restaurants[index].updatedAt = new Date().toISOString();
-    saveToDisk();
-    res.json(db.restaurants[index]);
+    req.db.restaurants[index].visits = req.db.restaurants[index].visits || [];
+    req.db.restaurants[index].visits.unshift(visit);
+    syncRestaurantFromVisits(req.db.restaurants[index]);
+    req.db.restaurants[index].updatedAt = new Date().toISOString();
+    persist(req);
+    res.json(req.db.restaurants[index]);
 });
 
 app.patch('/restaurants/:id/visits/:visitId', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
-    const visits = db.restaurants[index].visits || [];
+    const visits = req.db.restaurants[index].visits || [];
     const vIndex = visits.findIndex(v => v.id === req.params.visitId);
     if (vIndex === -1) return res.status(404).json({ error: 'Ziyaret bulunamadı' });
 
     visits[vIndex] = { ...visits[vIndex], ...req.body };
-    syncRestaurantFromVisits(db.restaurants[index]);
-    saveToDisk();
-    res.json(db.restaurants[index]);
+    syncRestaurantFromVisits(req.db.restaurants[index]);
+    persist(req);
+    res.json(req.db.restaurants[index]);
 });
 
 app.delete('/restaurants/:id/visits/:visitId', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
-    db.restaurants[index].visits = (db.restaurants[index].visits || []).filter(v => v.id !== req.params.visitId);
-    if (db.restaurants[index].visits.length === 0) {
+    req.db.restaurants[index].visits = (req.db.restaurants[index].visits || []).filter(v => v.id !== req.params.visitId);
+    if (req.db.restaurants[index].visits.length === 0) {
         return res.status(400).json({ error: 'Son ziyaret silinemez' });
     }
-    syncRestaurantFromVisits(db.restaurants[index]);
-    saveToDisk();
-    res.json(db.restaurants[index]);
+    syncRestaurantFromVisits(req.db.restaurants[index]);
+    persist(req);
+    res.json(req.db.restaurants[index]);
 });
 
 // Hızlı +1 (eski uyumluluk)
 app.post('/restaurants/:id/visit', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
     const today = new Date().toISOString().split('T')[0];
@@ -668,18 +699,18 @@ app.post('/restaurants/:id/visit', (req, res) => {
         tags: []
     };
 
-    db.restaurants[index].visits = db.restaurants[index].visits || [];
-    db.restaurants[index].visits.unshift(visit);
-    syncRestaurantFromVisits(db.restaurants[index]);
-    saveToDisk();
-    res.json(db.restaurants[index]);
+    req.db.restaurants[index].visits = req.db.restaurants[index].visits || [];
+    req.db.restaurants[index].visits.unshift(visit);
+    syncRestaurantFromVisits(req.db.restaurants[index]);
+    persist(req);
+    res.json(req.db.restaurants[index]);
 });
 
 app.delete('/restaurants/:id', (req, res) => {
-    const index = findRestaurant(req.params.id);
+    const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
-    db.restaurants.splice(index, 1);
-    saveToDisk();
+    req.db.restaurants.splice(index, 1);
+    persist(req);
     res.json({ success: true });
 });
 
