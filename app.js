@@ -1,0 +1,1556 @@
+const API = '';
+const TAG_PRESETS = ['İlk buluşma', 'Doğum günü', 'Yıldönümü', 'Özel gün', 'Kutlama'];
+const SPECIAL_TAGS = new Set(TAG_PRESETS);
+const CUISINE_EMOJI = {
+    'italyan': '🍕', 'japon': '🍣', 'çin': '🥡', 'türk': '🥙', 'kebap': '🥙',
+    'burger': '🍔', 'pizza': '🍕', 'kahve': '☕', 'cafe': '☕', 'kafe': '☕',
+    'deniz': '🦐', 'balık': '🐟', 'vegan': '🥗', 'tatlı': '🍰', 'meksika': '🌮',
+    'hint': '🍛', 'fransız': '🥐', 'kore': '🍜', 'fast': '🍟'
+};
+
+let cachedNames = [];
+let allRestaurants = [];
+let allWishlist = [];
+let appSettings = { coupleName1: '', coupleName2: '', theme: 'rose' };
+let addPhotoData = [];
+let visitPhotoData = [];
+let namePickerTarget = 'add';
+let currentView = 'list';
+let mapInstance = null;
+let markerCluster = null;
+let visitRestaurantId = null;
+let selectedAddTags = [];
+let selectedVisitTags = [];
+let rouletteSpinning = false;
+let roulettePool = [];
+let rouletteRotation = 0;
+let rouletteFromWishlist = false;
+const ROULETTE_COLORS = ['#f43f5e', '#fbbf24', '#10b981', '#8b5cf6', '#3b82f6', '#ec4899', '#14b8a6', '#f97316'];
+const photoGalleries = {};
+let lightboxPhotos = [];
+let lightboxIndex = 0;
+
+// --- AUTH ---
+async function initApp() {
+    const res = await fetch(`${API}/auth/status`);
+    const { authEnabled } = await res.json();
+    await loadSettings();
+    if (authEnabled && !localStorage.getItem('restoranAuth')) {
+        document.getElementById('login-screen').classList.remove('hidden');
+        return;
+    }
+    document.getElementById('app').classList.remove('hidden');
+    setupUI();
+    loadRestaurants();
+    loadStats();
+    loadWishlist();
+    const flash = sessionStorage.getItem('toast');
+    if (flash) {
+        sessionStorage.removeItem('toast');
+        showToast(flash);
+    }
+}
+
+async function login() {
+    const password = document.getElementById('login-password').value;
+    const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+    });
+    if (res.ok) {
+        localStorage.setItem('restoranAuth', '1');
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('app').classList.remove('hidden');
+        await loadSettings();
+        setupUI();
+        loadRestaurants();
+        loadStats();
+        loadWishlist();
+    } else {
+        document.getElementById('login-error').classList.remove('hidden');
+    }
+}
+
+function logout() {
+    localStorage.removeItem('restoranAuth');
+    location.reload();
+}
+
+document.getElementById('login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+// --- SETTINGS ---
+async function loadSettings() {
+    const res = await fetch(`${API}/settings`);
+    appSettings = await res.json();
+    applySettings();
+}
+
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme || 'rose');
+}
+
+function applySettings() {
+    const { coupleName1, coupleName2, theme } = appSettings;
+    applyTheme(theme);
+
+    const titleText = coupleName1 && coupleName2
+        ? `${coupleName1} & ${coupleName2}`
+        : coupleName1 ? `${coupleName1}'in Restoranları` : 'Bizim Restoranlarımız';
+    const subtitleText = coupleName1 && coupleName2
+        ? 'Birlikte keşfettiğimiz lezzetler 💕'
+        : 'Birlikte keşfettiğimiz lezzetler';
+
+    ['app-title', 'login-title'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = titleText;
+    });
+    ['app-subtitle', 'login-subtitle'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.textContent = id === 'login-subtitle' && coupleName1 && coupleName2
+                ? `${coupleName1} & ${coupleName2}'in lezzet günlüğü`
+                : subtitleText;
+        }
+    });
+}
+
+let selectedTheme = 'rose';
+
+function pickTheme(theme) {
+    selectedTheme = theme;
+    document.querySelectorAll('.theme-option').forEach(el => {
+        el.classList.toggle('active', el.dataset.theme === theme);
+    });
+}
+
+function openSettingsModal() {
+    selectedTheme = appSettings.theme || 'rose';
+    const modal = document.getElementById('settings-modal');
+    modal.classList.remove('hidden');
+    const themes = [
+        { id: 'rose', label: 'Gül', swatch: 'theme-swatch-rose' },
+        { id: 'dark', label: 'Gece', swatch: 'theme-swatch-dark' },
+        { id: 'cream', label: 'Krem', swatch: 'theme-swatch-cream' },
+        { id: 'lavender', label: 'Lila', swatch: 'theme-swatch-lavender' }
+    ];
+    modal.innerHTML = `<div class="modal-box">
+        <div class="flex justify-between mb-4">
+            <h2 class="font-display font-semibold theme-text">Kişiselleştir</h2>
+            <button onclick="closeModal('settings-modal')" class="text-2xl opacity-40">×</button>
+        </div>
+        <div class="space-y-4">
+            <div><label class="label">Senin Adın</label>
+            <input type="text" id="settings-name1" class="input" value="${escapeHtml(appSettings.coupleName1)}" placeholder="Ayşe"></div>
+            <div><label class="label">Sevgilinin Adı</label>
+            <input type="text" id="settings-name2" class="input" value="${escapeHtml(appSettings.coupleName2)}" placeholder="Mehmet"></div>
+            <div><label class="label">Tema</label>
+            <div class="theme-picker">${themes.map(t => `
+                <button type="button" class="theme-option ${selectedTheme === t.id ? 'active' : ''}" data-theme="${t.id}" onclick="pickTheme('${t.id}')">
+                    <div class="theme-swatch ${t.swatch}"></div>${t.label}
+                </button>`).join('')}
+            </div></div>
+            <div class="settings-divider"></div>
+            <div>
+                <p class="settings-section-title">Yedekleme</p>
+                <p class="settings-hint">Tüm restoranları, anıları ve ayarları indir veya geri yükle.</p>
+                <div class="flex gap-2 mt-2">
+                    <button type="button" onclick="exportBackup()" class="btn-secondary flex-1">📥 Yedek İndir</button>
+                    <button type="button" onclick="triggerBackupImport()" class="btn-secondary flex-1">📤 Yedek Yükle</button>
+                </div>
+            </div>
+            <button onclick="saveSettings()" class="btn-primary w-full">Kaydet</button>
+        </div>
+    </div>`;
+    modal.onclick = e => { if (e.target === modal) closeModal('settings-modal'); };
+}
+
+async function saveSettings() {
+    const body = {
+        coupleName1: document.getElementById('settings-name1').value,
+        coupleName2: document.getElementById('settings-name2').value,
+        theme: selectedTheme
+    };
+    const res = await fetch(`${API}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    appSettings = await res.json();
+    applySettings();
+    closeModal('settings-modal');
+    showToast('Ayarlar kaydedildi!');
+}
+
+// --- YEDEKLEME ---
+function triggerBackupImport() {
+    document.getElementById('backup-file-input')?.click();
+}
+
+async function exportBackup() {
+    try {
+        const res = await fetch(`${API}/backup/export`);
+        if (!res.ok) throw new Error('Yedek alınamadı');
+        const data = await res.json();
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `restoran-puan-yedek-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        showToast('Yedek indirildi!');
+    } catch {
+        showToast('Yedek indirilemedi');
+    }
+}
+
+async function importBackup(ev) {
+    const file = ev.target.files?.[0];
+    if (!file) return;
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (!Array.isArray(data.restaurants)) throw new Error('Geçersiz yedek dosyası');
+        const count = data.restaurants.length;
+        if (!confirm(`${count} restoran içeren yedek yüklenecek. Mevcut verilerin üzerine yazılır. Devam?`)) return;
+        const res = await fetch(`${API}/backup/import`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: text
+        });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Yükleme başarısız');
+        showToast(`${result.restaurantCount} restoran geri yüklendi!`);
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        showToast(e.message || 'Yedek yüklenemedi');
+    } finally {
+        ev.target.value = '';
+    }
+}
+
+// --- PAYLAŞILABİLİR KART ---
+const SHARE_CARD_THEMES = {
+    rose: { bg: ['#fff5f5', '#fecdd3'], primary: '#e11d48', light: '#fff1f2', text: '#1f2937', muted: '#6b7280' },
+    dark: { bg: ['#1a1015', '#251820'], primary: '#fb7185', light: '#2a1520', text: '#f3f4f6', muted: '#d1d5db' },
+    cream: { bg: ['#fffdf7', '#fde68a'], primary: '#b45309', light: '#fffbeb', text: '#292524', muted: '#78716c' },
+    lavender: { bg: ['#faf5ff', '#e9d5ff'], primary: '#8b5cf6', light: '#f5f3ff', text: '#1f2937', muted: '#6b7280' }
+};
+
+function getCoupleTitle() {
+    const { coupleName1, coupleName2 } = appSettings;
+    if (coupleName1 && coupleName2) return `${coupleName1} & ${coupleName2}`;
+    if (coupleName1) return `${coupleName1}'in Restoranları`;
+    return 'Bizim Restoranlarımız';
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    words.forEach(word => {
+        const test = line ? `${line} ${word}` : word;
+        if (ctx.measureText(test).width > maxWidth && line) {
+            lines.push(line);
+            line = word;
+        } else line = test;
+    });
+    if (line) lines.push(line);
+    return lines;
+}
+
+async function drawShareCard(stats) {
+    await document.fonts.ready;
+    const canvas = document.getElementById('share-card-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = 1080;
+    const h = 1350;
+    canvas.width = w;
+    canvas.height = h;
+    const theme = SHARE_CARD_THEMES[appSettings.theme] || SHARE_CARD_THEMES.rose;
+    const title = getCoupleTitle();
+
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, theme.bg[0]);
+    grad.addColorStop(1, theme.bg[1]);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = theme.primary;
+    ctx.beginPath();
+    ctx.arc(900, 180, 220, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(120, 1100, 180, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = theme.light;
+    roundRect(ctx, 60, 60, w - 120, h - 120, 48);
+    ctx.fill();
+    ctx.strokeStyle = theme.primary;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.primary;
+    ctx.font = 'bold 72px "Playfair Display", Georgia, serif';
+    ctx.fillText('🍽️', w / 2, 200);
+
+    ctx.fillStyle = theme.text;
+    ctx.font = 'bold 64px "Playfair Display", Georgia, serif';
+    const titleLines = wrapCanvasText(ctx, title, w - 200);
+    titleLines.forEach((line, i) => ctx.fillText(line, w / 2, 300 + i * 72));
+
+    ctx.fillStyle = theme.muted;
+    ctx.font = '500 32px "DM Sans", system-ui, sans-serif';
+    ctx.fillText('Birlikte keşfettiğimiz lezzetler 💕', w / 2, 300 + titleLines.length * 72 + 50);
+
+    const avg = stats.avgRating || '—';
+    const statsY = 520;
+    const cols = [
+        { num: stats.restaurantCount, label: 'Restoran' },
+        { num: stats.visitCount, label: 'Ziyaret' },
+        { num: avg, label: 'Ort. Puan', suffix: avg !== '—' ? '★' : '' }
+    ];
+    cols.forEach((col, i) => {
+        const x = 180 + i * 360;
+        ctx.fillStyle = theme.primary;
+        ctx.font = 'bold 80px "DM Sans", system-ui, sans-serif';
+        ctx.fillText(`${col.num}${col.suffix || ''}`, x, statsY);
+        ctx.fillStyle = theme.muted;
+        ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
+        ctx.fillText(col.label, x, statsY + 44);
+    });
+
+    const highlights = [];
+    if (stats.topRestaurant) highlights.push({ icon: '🏆', label: 'En çok gidilen', value: `${stats.topRestaurant.name} (${stats.topRestaurant.visits}x)` });
+    if (stats.topRated) highlights.push({ icon: '⭐', label: 'En yüksek puan', value: `${stats.topRated.name} · ${stats.topRated.rating}★` });
+    if (stats.favoriteCount) highlights.push({ icon: '❤️', label: 'Favoriler', value: `${stats.favoriteCount} restoran` });
+
+    let hy = 680;
+    highlights.forEach(item => {
+        ctx.textAlign = 'left';
+        ctx.fillStyle = theme.light;
+        roundRect(ctx, 120, hy, w - 240, 110, 24);
+        ctx.fill();
+        ctx.strokeStyle = theme.primary;
+        ctx.globalAlpha = 0.25;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.font = '600 30px "DM Sans", system-ui, sans-serif';
+        ctx.fillStyle = theme.muted;
+        ctx.fillText(`${item.icon} ${item.label}`, 150, hy + 42);
+        ctx.font = 'bold 34px "DM Sans", system-ui, sans-serif';
+        ctx.fillStyle = theme.text;
+        const valLines = wrapCanvasText(ctx, item.value, w - 300);
+        valLines.slice(0, 2).forEach((line, li) => ctx.fillText(line, 150, hy + 82 + li * 38));
+        hy += 130;
+    });
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = theme.muted;
+    ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
+    const dateStr = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    ctx.fillText(`Lezzet günlüğü · ${dateStr}`, w / 2, h - 120);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+async function openShareCardModal() {
+    closeFabMenu();
+    const res = await fetch(`${API}/stats`);
+    const stats = await res.json();
+    if (!stats.restaurantCount) {
+        showToast('Önce bir restoran ekle!');
+        return;
+    }
+    const modal = document.getElementById('share-card-modal');
+    modal.classList.remove('hidden');
+    modal.innerHTML = `<div class="modal-box share-card-modal-box text-center">
+        <div class="flex justify-between mb-4">
+            <h2 class="font-display font-semibold theme-text">Paylaşılabilir Kart</h2>
+            <button onclick="closeModal('share-card-modal')" class="text-2xl opacity-40">×</button>
+        </div>
+        <p class="text-sm opacity-70 mb-4">Story veya gönderi olarak paylaşabilirsin</p>
+        <div class="share-card-preview">
+            <canvas id="share-card-canvas" class="share-card-canvas"></canvas>
+        </div>
+        <div class="flex gap-2 mt-4">
+            <button onclick="downloadShareCard()" class="btn-primary flex-1">📥 İndir</button>
+            <button onclick="shareShareCard()" class="btn-secondary flex-1">📤 Paylaş</button>
+        </div>
+    </div>`;
+    modal.onclick = e => { if (e.target === modal) closeModal('share-card-modal'); };
+    await drawShareCard(stats);
+}
+
+function downloadShareCard() {
+    const canvas = document.getElementById('share-card-canvas');
+    if (!canvas) return;
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = `lezzet-gunlugu-${new Date().toISOString().slice(0, 10)}.png`;
+    a.click();
+    showToast('Kart indirildi!');
+}
+
+async function shareShareCard() {
+    const canvas = document.getElementById('share-card-canvas');
+    if (!canvas) return;
+    try {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const file = new File([blob], `lezzet-gunlugu-${new Date().toISOString().slice(0, 10)}.png`, { type: 'image/png' });
+        if (navigator.share && navigator.canShare?.({ files: [file] })) {
+            await navigator.share({ files: [file], title: getCoupleTitle(), text: 'Birlikte keşfettiğimiz lezzetler 💕' });
+            showToast('Paylaşıldı!');
+        } else {
+            downloadShareCard();
+        }
+    } catch (e) {
+        if (e.name !== 'AbortError') downloadShareCard();
+    }
+}
+
+// --- HELPERS ---
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str || '';
+    return div.innerHTML;
+}
+
+function avgRating(my, partner) {
+    return ((my + partner) / 2).toFixed(1);
+}
+
+function formatDate(d) {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function renderStars(rating, filled = 'text-amber-400', empty = 'text-gray-200') {
+    return Array.from({ length: 5 }, (_, i) => `<span class="${i < rating ? filled : empty}">★</span>`).join('');
+}
+
+function getCuisineEmoji(cuisine) {
+    if (!cuisine) return '🍽️';
+    const lower = cuisine.toLowerCase();
+    for (const [key, emoji] of Object.entries(CUISINE_EMOJI)) {
+        if (lower.includes(key)) return emoji;
+    }
+    return '🍽️';
+}
+
+function getAgreementBadge(my, partner) {
+    const diff = Math.abs(my - partner);
+    if (diff === 0) return '<span class="agreement-badge agreement-match">🤝 Tam uyum</span>';
+    if (diff >= 2) return '<span class="agreement-badge agreement-debate">💬 Tartışmalı</span>';
+    return '';
+}
+
+function getCoverPhoto(r) {
+    const photos = (r.visits || []).flatMap(v => v.photos || []);
+    if (photos.length) return photos[0];
+    if (r.photos?.length) return r.photos[0];
+    return null;
+}
+
+function getAllPhotos(r, limit = 6) {
+    const photos = (r.visits || []).flatMap(v => v.photos || []);
+    if (!photos.length && r.photos?.length) return r.photos.slice(0, limit);
+    return photos.slice(0, limit);
+}
+
+function buildStarPicker(containerId, hiddenId, initial = 3) {
+    const container = document.getElementById(containerId);
+    const hidden = document.getElementById(hiddenId);
+    if (!container || !hidden) return;
+    hidden.value = initial;
+    container.innerHTML = Array.from({ length: 5 }, (_, i) => {
+        const v = i + 1;
+        return `<span class="star-btn ${v <= initial ? 'text-amber-400' : 'text-gray-200'}" onclick="setStar('${containerId}','${hiddenId}',${v})">★</span>`;
+    }).join('');
+}
+
+function setStar(containerId, hiddenId, val) {
+    document.getElementById(hiddenId).value = val;
+    document.getElementById(containerId).querySelectorAll('.star-btn').forEach((s, i) => {
+        s.className = `star-btn ${i < val ? 'text-amber-400' : 'text-gray-200'}`;
+    });
+}
+
+function formatDateParts(d) {
+    if (!d) return { day: '—', month: '' };
+    const date = new Date(d + 'T00:00:00');
+    return {
+        day: date.getDate(),
+        month: date.toLocaleDateString('tr-TR', { month: 'short' }).replace('.', '')
+    };
+}
+
+function showToast(msg) {
+    const toast = document.getElementById('toast');
+    const msgEl = document.getElementById('toast-msg');
+    if (msgEl) msgEl.textContent = msg;
+    else toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+function readFilesAsBase64(files) {
+    return Promise.all([...files].map(f => new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(f);
+    })));
+}
+
+function renderPhotoPreviews(containerId, photos, removable, removeFn) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    photoGalleries[containerId] = photos;
+    el.className = 'photo-upload-grid';
+    el.innerHTML = photos.map((src, i) => `
+        <div class="photo-upload-item">
+            <img src="${src}" onclick="openLightboxGallery('${containerId}',${i})">
+            ${removable ? `<button type="button" onclick="${removeFn}(${i})" class="photo-upload-remove">×</button>` : ''}
+        </div>`).join('');
+}
+
+function renderPhotoSection(photos, skipCover, galleryKey) {
+    const gallery = skipCover ? photos.slice(1) : photos;
+    if (!gallery.length) return '';
+    photoGalleries[galleryKey] = gallery;
+    const bentoClass = gallery.length === 1 ? 'photo-bento-1'
+        : gallery.length === 2 ? 'photo-bento-2'
+        : gallery.length === 3 ? 'photo-bento-3' : 'photo-bento-4';
+    const frames = gallery.slice(0, 4).map((p, i) => {
+        const hasMore = i === 3 && gallery.length > 4;
+        return `<button type="button" class="photo-frame" onclick="openLightboxGallery('${galleryKey}',${i})">
+            <img src="${p}" alt="" loading="lazy">
+            ${hasMore ? `<span class="photo-more">+${gallery.length - 4}</span>` : ''}
+        </button>`;
+    }).join('');
+    return `<div class="photo-section">
+        <div class="photo-section-label"><span class="photo-section-icon">📸</span> Anılar <span class="photo-count">${photos.length} fotoğraf</span></div>
+        <div class="photo-bento ${bentoClass}">${frames}</div>
+    </div>`;
+}
+
+function renderPhotoStrip(photos, galleryKey) {
+    if (!photos?.length) return '';
+    photoGalleries[galleryKey] = photos;
+    return `<div class="photo-strip mt-2">${photos.slice(0, 5).map((p, i) =>
+        `<div class="photo-strip-item" onclick="openLightboxGallery('${galleryKey}',${i})"><img src="${p}" alt="" loading="lazy"></div>`
+    ).join('')}</div>`;
+}
+
+function openLightboxGallery(key, index) {
+    lightboxPhotos = photoGalleries[key] || [];
+    lightboxIndex = index;
+    showLightbox();
+}
+
+function openLightbox(src) {
+    lightboxPhotos = [src];
+    lightboxIndex = 0;
+    showLightbox();
+}
+
+function showLightbox() {
+    if (!lightboxPhotos.length) return;
+    updateLightbox();
+    document.getElementById('photo-lightbox').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function updateLightbox() {
+    document.getElementById('lightbox-img').src = lightboxPhotos[lightboxIndex];
+    const counter = document.getElementById('lightbox-counter');
+    const prev = document.getElementById('lightbox-prev');
+    const next = document.getElementById('lightbox-next');
+    const multi = lightboxPhotos.length > 1;
+    counter.textContent = multi ? `${lightboxIndex + 1} / ${lightboxPhotos.length}` : '';
+    prev.classList.toggle('hidden', !multi);
+    next.classList.toggle('hidden', !multi);
+}
+
+function lightboxNav(dir, e) {
+    e.stopPropagation();
+    lightboxIndex = (lightboxIndex + dir + lightboxPhotos.length) % lightboxPhotos.length;
+    updateLightbox();
+}
+
+function closeLightbox(e) {
+    if (e && e.target !== e.currentTarget && !e.target?.classList?.contains('lightbox-close')) return;
+    document.getElementById('photo-lightbox').classList.add('hidden');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => {
+    const lb = document.getElementById('photo-lightbox');
+    if (lb.classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeLightbox({ target: lb, currentTarget: lb });
+    if (e.key === 'ArrowLeft') lightboxNav(-1, { stopPropagation() {} });
+    if (e.key === 'ArrowRight') lightboxNav(1, { stopPropagation() {} });
+});
+
+function renderEmptyState(icon, title, desc, actionHtml = '') {
+    return `<div class="empty-state">
+        <div class="empty-icon">${icon}</div>
+        <h3>${title}</h3>
+        <p>${desc}</p>
+        ${actionHtml ? `<div class="mt-4">${actionHtml}</div><div class="empty-arrow">↓</div>` : ''}
+    </div>`;
+}
+
+// --- KATEGORİ (otomatik — ana puandan türetilir) ---
+function categoriesFromRatings(my, partner) {
+    const m = Number(my) || 3;
+    const p = Number(partner) || 3;
+    return {
+        food: { my: m, partner: p },
+        service: { my: m, partner: p },
+        atmosphere: { my: m, partner: p },
+        price: { my: m, partner: p }
+    };
+}
+
+// --- YEMEK & ETİKET ---
+function addDishRow(prefix, name = '', rating = 5) {
+    const container = document.getElementById(`${prefix}-dishes`);
+    const row = document.createElement('div');
+    row.className = 'flex gap-2 items-center dish-row';
+    row.innerHTML = `
+        <input type="text" class="input dish-name flex-1" placeholder="Yemek adı" value="${escapeHtml(name)}">
+        <select class="input dish-rating w-20 text-sm py-1">${[1,2,3,4,5].map(n=>`<option value="${n}" ${n===rating?'selected':''}>${n}★</option>`).join('')}</select>
+        <button type="button" onclick="this.parentElement.remove()" class="text-red-400 text-lg">×</button>`;
+    container.appendChild(row);
+}
+
+function getDishesFromForm(prefix) {
+    const rows = document.querySelectorAll(`#${prefix}-dishes .dish-row`);
+    return [...rows].map(r => ({
+        name: r.querySelector('.dish-name').value.trim(),
+        rating: Number(r.querySelector('.dish-rating').value)
+    })).filter(d => d.name);
+}
+
+function buildTagSelector(prefix, selected = []) {
+    const container = document.getElementById(`${prefix}-tags`);
+    if (!container) return;
+    if (prefix === 'add') selectedAddTags = [...selected];
+    else selectedVisitTags = [...selected];
+    container.innerHTML = TAG_PRESETS.map(tag => {
+        const sel = selected.includes(tag);
+        return `<button type="button" onclick="toggleTag('${prefix}','${tag}')" class="tag-chip ${sel?'selected':''}" data-tag="${tag}">${tag}</button>`;
+    }).join('');
+}
+
+function toggleTag(prefix, tag) {
+    const arr = prefix === 'add' ? selectedAddTags : selectedVisitTags;
+    const idx = arr.indexOf(tag);
+    if (idx === -1) arr.push(tag); else arr.splice(idx, 1);
+    buildTagSelector(prefix, arr);
+}
+
+function renderTags(tags, special = true) {
+    if (!tags?.length) return '';
+    return `<div class="flex flex-wrap gap-1 mt-1">${tags.map(t =>
+        `<span class="tag-chip ${special && SPECIAL_TAGS.has(t) ? 'special' : ''}">${escapeHtml(t)}</span>`
+    ).join('')}</div>`;
+}
+
+// --- GEOCODE ---
+function parseCoordsClient(text) {
+    const trimmed = text.trim();
+    const direct = trimmed.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    if (direct) {
+        const lat = parseFloat(direct[1]);
+        const lng = parseFloat(direct[2]);
+        if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
+    }
+    if (/google|goo\.gl|maps\.app/i.test(trimmed)) {
+        const m = trimmed.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/)
+            || trimmed.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/)
+            || trimmed.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+        if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    }
+    return null;
+}
+
+async function geocodeLocation(prefix) {
+    const input = document.getElementById(`${prefix}-location`);
+    const location = input?.value?.trim();
+    if (!location) {
+        showLocationStatus(prefix, 'Konum yazın veya Google Maps linki yapıştırın', 'error');
+        return false;
+    }
+    const local = parseCoordsClient(location);
+    if (local) {
+        input.dataset.lat = local.lat;
+        input.dataset.lng = local.lng;
+        showLocationStatus(prefix, '📍 Google Maps linkinden alındı', 'success');
+        return true;
+    }
+    showLocationStatus(prefix, 'Aranıyor...', 'loading');
+    try {
+        const name = document.getElementById(`${prefix}-name`)?.value?.trim() || '';
+        const params = new URLSearchParams({ q: location });
+        if (name) params.set('name', name);
+        const res = await fetch(`${API}/geocode?${params}`);
+        let data = {};
+        try { data = await res.json(); } catch { /* */ }
+        if (res.ok && data.lat != null) {
+            input.dataset.lat = data.lat;
+            input.dataset.lng = data.lng;
+            showLocationStatus(prefix, '📍 Bulundu — haritada görünecek', 'success');
+            return true;
+        }
+        delete input.dataset.lat;
+        delete input.dataset.lng;
+        showLocationStatus(prefix, data.error || 'Konum bulunamadı', 'error');
+        return false;
+    } catch {
+        showLocationStatus(prefix, 'Sunucuya bağlanılamadı', 'error');
+        return false;
+    }
+}
+
+function showLocationStatus(prefix, msg, type) {
+    const el = document.getElementById(`${prefix}-location-status`);
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove('hidden', 'text-emerald-600', 'text-red-500', 'text-gray-400');
+    if (type === 'success') el.classList.add('text-emerald-600');
+    else if (type === 'error') el.classList.add('text-red-500');
+    else el.classList.add('text-gray-400');
+}
+
+function setLocationCoords(prefix, lat, lng) {
+    const input = document.getElementById(`${prefix}-location`);
+    if (!input || !lat || !lng) return;
+    input.dataset.lat = lat;
+    input.dataset.lng = lng;
+    showLocationStatus(prefix, '📍 Haritada kayıtlı', 'success');
+}
+
+// --- İSİM ÖNERİLERİ ---
+async function fetchNames(search = '') {
+    const res = await fetch(`${API}/names?search=${encodeURIComponent(search)}`);
+    return res.json();
+}
+
+function fillNameFields(target, entry) {
+    const p = target === 'edit' ? 'edit' : (target === 'wishlist' ? 'wishlist' : 'add');
+    const nameEl = document.getElementById(`${p}-name`);
+    if (nameEl) nameEl.value = entry.name;
+    const locEl = document.getElementById(`${p}-location`);
+    if (locEl && entry.location) locEl.value = entry.location;
+}
+
+async function showSuggest(inputId, suggestId) {
+    const query = document.getElementById(inputId).value.trim();
+    cachedNames = await fetchNames(query);
+    const dropdown = document.getElementById(suggestId);
+    const target = inputId.includes('edit') ? 'edit' : 'add';
+    if (!cachedNames.length) { dropdown.classList.add('hidden'); return; }
+    dropdown.innerHTML = cachedNames.map((n, i) => `
+        <button type="button" class="w-full text-left px-4 py-2 hover:bg-rose-50 text-sm" onclick="fillNameFields('${target}',cachedNames[${i}]);document.getElementById('${suggestId}').classList.add('hidden')">
+            <span class="font-medium">${escapeHtml(n.name)}</span>
+            ${n.location?`<span class="text-gray-400 text-xs ml-2">${escapeHtml(n.location)}</span>`:''}
+        </button>`).join('');
+    dropdown.classList.remove('hidden');
+}
+
+function setupNameAutocomplete(inputId, suggestId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('input', () => showSuggest(inputId, suggestId));
+    input.addEventListener('focus', () => showSuggest(inputId, suggestId));
+}
+
+async function openNamePicker(target) {
+    namePickerTarget = target;
+    cachedNames = await fetchNames('');
+    const modal = document.getElementById('name-picker-modal');
+    modal.classList.remove('hidden');
+    modal.innerHTML = `<div class="modal-box">
+        <div class="flex justify-between mb-4"><h2 class="font-semibold text-rose-700">Kayıtlı Restoranlar</h2>
+        <button onclick="closeModal('name-picker-modal')" class="text-2xl text-gray-400">×</button></div>
+        <input type="text" id="name-picker-search" class="input mb-3" placeholder="Ara..." oninput="searchNamePicker(this.value)">
+        <div id="name-picker-list" class="max-h-60 overflow-y-auto space-y-1"></div>
+    </div>`;
+    renderNamePickerList('');
+    modal.onclick = e => { if (e.target === modal) closeModal('name-picker-modal'); };
+}
+
+function searchNamePicker(q) { renderNamePickerList(q); }
+
+function renderNamePickerList(search) {
+    const list = document.getElementById('name-picker-list');
+    if (!list) return;
+    const filtered = search ? cachedNames.filter(n =>
+        n.name.toLowerCase().includes(search.toLowerCase()) ||
+        n.location.toLowerCase().includes(search.toLowerCase())
+    ) : cachedNames;
+    list.innerHTML = filtered.length ? filtered.map((n) => `
+        <button type="button" onclick="fillNameFields('${namePickerTarget}',cachedNames[${cachedNames.indexOf(n)}]);closeModal('name-picker-modal')"
+            class="w-full text-left px-4 py-3 rounded-xl hover:bg-rose-50">
+            <div class="font-medium">${escapeHtml(n.name)}</div>
+            ${n.location?`<div class="text-xs text-gray-400">${escapeHtml(n.location)}</div>`:''}
+        </button>`).join('') : '<p class="text-gray-400 text-center py-4 text-sm">Kayıt bulunamadı</p>';
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+// --- DASHBOARD ---
+async function loadStats() {
+    const res = await fetch(`${API}/stats`);
+    const s = await res.json();
+    renderDashboard(s);
+}
+
+function renderDashboard(s) {
+    const el = document.getElementById('dashboard');
+    if (!el) return;
+    if (!s.restaurantCount) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = `
+        <div class="stats-row">
+            <div class="stat-pill"><div class="stat-num">${s.restaurantCount}</div><div class="stat-label">Restoran</div></div>
+            <div class="stat-pill"><div class="stat-num">${s.visitCount}</div><div class="stat-label">Ziyaret</div></div>
+            <div class="stat-pill"><div class="stat-num">${s.favoriteCount}</div><div class="stat-label">Favori</div></div>
+        </div>
+        <div class="dashboard-grid">
+            <div class="dashboard-card"><div class="dash-icon">🏆</div><div class="dash-value">${s.topRestaurant ? escapeHtml(s.topRestaurant.name) : '—'}</div><div class="dash-label">En çok gidilen${s.topRestaurant ? ` (${s.topRestaurant.visits}x)` : ''}</div></div>
+            <div class="dashboard-card"><div class="dash-icon">⭐</div><div class="dash-value">${s.topRated ? escapeHtml(s.topRated.name) : '—'}</div><div class="dash-label">En yüksek${s.topRated ? ` (${s.topRated.rating}★)` : ''}</div></div>
+            <div class="dashboard-card"><div class="dash-icon">📅</div><div class="dash-value">${s.monthVisits}</div><div class="dash-label">Bu ay</div></div>
+        </div>`;
+}
+
+// --- GÖRÜNÜM ---
+function setView(view) {
+    currentView = view;
+    ['list', 'map', 'timeline', 'wishlist'].forEach(v => {
+        document.getElementById(`view-${v}`)?.classList.toggle('active', view === v);
+    });
+    document.getElementById('map-container').classList.toggle('hidden', view !== 'map');
+    document.getElementById('list-section').classList.toggle('hidden', view !== 'list');
+    document.getElementById('timeline-section').classList.toggle('hidden', view !== 'timeline');
+    document.getElementById('wishlist-section').classList.toggle('hidden', view !== 'wishlist');
+    document.getElementById('add-section').classList.toggle('hidden', view === 'timeline' || view === 'wishlist');
+
+    if (view === 'map') renderMap();
+    else if (view === 'timeline') loadTimeline();
+    else if (view === 'wishlist') loadWishlist();
+}
+
+function createCustomIcon(type) {
+    const cls = type === 'wishlist' ? 'custom-marker-wishlist' : 'custom-marker-visited';
+    const emoji = type === 'wishlist' ? '📌' : '🍽';
+    return L.divIcon({
+        className: '',
+        html: `<div class="${cls}"><span>${emoji}</span></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+        popupAnchor: [0, -32]
+    });
+}
+
+function buildMapPopup(r, isWishlist = false) {
+    const cover = getCoverPhoto(r);
+    const avg = !isWishlist ? avgRating(r.myRating, r.partnerRating) : null;
+    return `<div>
+        ${cover ? `<img src="${cover}" class="map-popup-img">` : ''}
+        <b>${escapeHtml(r.name)}</b><br>
+        <span style="color:#6b7280;font-size:12px">${escapeHtml(r.location || '')}</span>
+        ${avg ? `<br><span style="color:#f43f5e;font-weight:600">${avg}★</span> · ${r.visitCount} ziyaret` : ''}
+        ${isWishlist ? '<br><span style="color:#8b5cf6;font-size:12px">📌 Gitmek istiyoruz</span>' : ''}
+    </div>`;
+}
+
+function renderMap() {
+    const container = document.getElementById('map-container');
+    if (!mapInstance) {
+        mapInstance = L.map(container).setView([41.0082, 28.9784], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(mapInstance);
+        markerCluster = L.markerClusterGroup({ maxClusterRadius: 40 });
+        mapInstance.addLayer(markerCluster);
+    }
+    markerCluster.clearLayers();
+
+    const withCoords = allRestaurants.filter(r => r.lat && r.lng);
+    const wishWithCoords = allWishlist.filter(w => w.lat && w.lng);
+
+    if (!withCoords.length && !wishWithCoords.length) {
+        if (!document.getElementById('map-hint')) {
+            const hint = document.createElement('div');
+            hint.id = 'map-hint';
+            hint.className = 'absolute inset-0 flex items-center justify-center bg-white/80 z-[1000] pointer-events-none p-6 text-center';
+            hint.innerHTML = '<div><p class="font-medium text-gray-700">Haritada konum yok</p><p class="text-sm text-gray-500 mt-1">Google Maps linki yapıştırıp <b>Konumu Bul</b>a tıklayın</p></div>';
+            container.style.position = 'relative';
+            container.appendChild(hint);
+        }
+    } else {
+        document.getElementById('map-hint')?.remove();
+        withCoords.forEach(r => {
+            const marker = L.marker([r.lat, r.lng], { icon: createCustomIcon('visited') });
+            marker.bindPopup(buildMapPopup(r));
+            markerCluster.addLayer(marker);
+        });
+        wishWithCoords.forEach(w => {
+            const marker = L.marker([w.lat, w.lng], { icon: createCustomIcon('wishlist') });
+            marker.bindPopup(buildMapPopup(w, true));
+            markerCluster.addLayer(marker);
+        });
+        const all = [...withCoords, ...wishWithCoords];
+        if (all.length === 1) {
+            mapInstance.setView([all[0].lat, all[0].lng], 14);
+        } else if (all.length > 1) {
+            const bounds = L.latLngBounds(all.map(x => [x.lat, x.lng]));
+            mapInstance.fitBounds(bounds, { padding: [40, 40] });
+        }
+    }
+    setTimeout(() => mapInstance.invalidateSize(), 100);
+}
+
+// --- LİSTE ---
+async function loadRestaurants() {
+    const search = document.getElementById('search-input').value;
+    const sort = document.getElementById('sort-select').value;
+    const favorite = document.getElementById('filter-favorite').checked;
+    const params = new URLSearchParams({ sort });
+    if (search) params.set('search', search);
+    if (favorite) params.set('favorite', 'true');
+    const res = await fetch(`${API}/restaurants?${params}`);
+    allRestaurants = await res.json();
+    renderList(allRestaurants);
+    loadStats();
+    if (currentView === 'map') renderMap();
+}
+
+function renderVisitHistory(visits, restaurantId) {
+    if (!visits?.length) return '';
+    const sorted = [...visits].sort((a, b) => b.date.localeCompare(a.date));
+    return `<div class="mt-3 space-y-2">
+        <p class="text-xs font-semibold text-rose-400 uppercase tracking-wide">Son Ziyaretler</p>
+        ${sorted.slice(0, 2).map(v => {
+            const isSpecial = (v.tags || []).some(t => SPECIAL_TAGS.has(t));
+            return `<div class="visit-history-item ${isSpecial ? 'special-memory' : ''}">
+                <div class="text-sm font-medium">${formatDate(v.date)} ${isSpecial ? '✨' : ''}</div>
+                ${v.notes ? `<p class="text-sm text-gray-600 italic mt-1">"${escapeHtml(v.notes)}"</p>` : ''}
+                ${v.dishes?.length ? `<p class="text-xs text-gray-500 mt-1">${v.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(' · ')}</p>` : ''}
+                ${renderTags(v.tags)}
+            </div>`;
+        }).join('')}
+        ${sorted.length > 2 ? `<button onclick="openHistoryModal('${restaurantId}')" class="text-sm text-rose-500 hover:underline">Tümünü gör (${sorted.length})</button>` : ''}
+    </div>`;
+}
+
+function renderRestaurantCard(r, index) {
+    const avg = avgRating(r.myRating, r.partnerRating);
+    const cover = getCoverPhoto(r);
+    const photos = getAllPhotos(r);
+    const emoji = getCuisineEmoji(r.cuisine);
+    const galleryKey = `card-${r.id}`;
+    const perfect = Math.round(parseFloat(avg)) >= 5;
+    photoGalleries[`${galleryKey}-all`] = photos;
+    const perfectClass = perfect ? ' card-perfect' : '';
+
+    if (cover) {
+        return `<div class="card restaurant-card restaurant-card-compact rounded-2xl shadow-sm${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
+            <div class="card-cover">
+                <img src="${cover}" class="card-cover-img" alt="">
+                <div class="card-cover-overlay"></div>
+                <div class="card-cover-info"><h3>${escapeHtml(r.name)}</h3></div>
+                <button onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover ${r.favorite?'active':''}">${r.favorite?'❤️':'🤍'}</button>
+                ${photos.length > 1 ? `<span class="cover-photo-badge">📸 ${photos.length}</span>` : ''}
+                <div class="cover-rating-badge"><div class="score">${avg}</div><div class="stars text-amber-400">${renderStars(Math.round(avg))}</div></div>
+            </div>
+        </div>`;
+    }
+
+    return `<div class="card restaurant-card restaurant-card-compact rounded-2xl shadow-sm${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
+        <div class="card-compact-placeholder">
+            <button onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-placeholder ${r.favorite?'active':''}">${r.favorite?'❤️':'🤍'}</button>
+            <span class="emoji">${emoji}</span>
+            <span class="name">${escapeHtml(r.name)}</span>
+            <div class="rating-badge"><div class="text-xl font-bold text-rose-500 leading-none">${avg}</div>
+            <div class="text-amber-400 text-sm">${renderStars(Math.round(avg))}</div></div>
+        </div>
+    </div>`;
+}
+
+async function openRestaurantDetail(id) {
+    const res = await fetch(`${API}/restaurants/${id}`);
+    const r = await res.json();
+    const avg = avgRating(r.myRating, r.partnerRating);
+    const photos = getAllPhotos(r);
+    const cover = getCoverPhoto(r);
+    const galleryKey = `detail-${r.id}`;
+    photoGalleries[`${galleryKey}-all`] = photos;
+    const agreement = getAgreementBadge(r.myRating, r.partnerRating);
+
+    const modal = document.getElementById('detail-modal');
+    modal.classList.remove('hidden');
+    modal.innerHTML = `<div class="modal-box max-w-lg">
+        <div class="flex justify-between items-start mb-3">
+            <div>
+                <h2 class="font-display text-xl font-bold text-rose-700">${escapeHtml(r.name)}</h2>
+                <p class="text-sm text-gray-500 mt-0.5">${escapeHtml(r.location || '')}${r.lat && r.lng ? ' 📍' : ''}</p>
+            </div>
+            <button onclick="closeModal('detail-modal')" class="text-2xl text-gray-400 leading-none">×</button>
+        </div>
+        ${cover ? `<img src="${cover}" class="detail-cover cursor-pointer" onclick="openLightboxGallery('${galleryKey}-all',0)">` : ''}
+        <div class="flex flex-wrap items-center gap-3 mb-3">
+            <div class="rating-badge"><div class="text-2xl font-bold text-rose-500 leading-none">${avg}</div>
+            <div class="text-amber-400 text-sm">${renderStars(Math.round(avg))}</div></div>
+            ${agreement}
+        </div>
+        <div class="flex flex-wrap gap-4 text-sm mb-3">
+            <span><span class="text-gray-500">Senin:</span> ${renderStars(r.myRating)}</span>
+            <span><span class="text-gray-500">Sevgilinin:</span> ${renderStars(r.partnerRating)}</span>
+        </div>
+        ${r.notes ? `<p class="text-sm text-gray-600 mt-3 italic">"${escapeHtml(r.notes)}"</p>` : ''}
+        <div class="flex gap-4 mt-2 text-xs text-gray-400">
+            <span>${r.visitCount} ziyaret</span>
+            <span>${formatDate(r.lastVisited)}</span>
+        </div>
+        ${renderPhotoSection(photos, !!cover, galleryKey)}
+        ${renderVisitHistory(r.visits, r.id)}
+        <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-rose-100">
+            <button onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="visit-btn bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-sm font-medium px-4 py-2 rounded-xl">+1 Ziyaret</button>
+            <button onclick="closeModal('detail-modal');openHistoryModal('${r.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-sm font-medium px-4 py-2 rounded-xl">Geçmiş</button>
+            <button onclick="closeModal('detail-modal');openEditModal('${r.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-sm font-medium px-4 py-2 rounded-xl">Düzenle</button>
+            <button onclick="closeModal('detail-modal');deleteRestaurant('${r.id}')" class="bg-gray-50 hover:bg-red-50 text-gray-500 text-sm font-medium px-4 py-2 rounded-xl">Sil</button>
+        </div>
+    </div>`;
+    modal.onclick = e => { if (e.target === modal) closeModal('detail-modal'); };
+}
+
+function renderList(restaurants) {
+    const list = document.getElementById('restaurant-list');
+    const search = document.getElementById('search-input').value;
+    const favorite = document.getElementById('filter-favorite').checked;
+
+    if (!restaurants.length) {
+        if (search || favorite) {
+            list.innerHTML = renderEmptyState('🔍', 'Sonuç bulunamadı', 'Farklı bir arama deneyin veya filtreyi kaldırın');
+        } else {
+            list.innerHTML = renderEmptyState('🍽️', 'Henüz restoran yok', 'İlk buluşma restoranınızı ekleyerek başlayın!', '<button onclick="fabAddRestaurant()" class="btn-primary">İlk Restoranı Ekle</button>');
+        }
+        return;
+    }
+    list.innerHTML = restaurants.map((r, i) => renderRestaurantCard(r, i)).join('');
+}
+
+// --- TIMELINE ---
+async function loadTimeline() {
+    const res = await fetch(`${API}/timeline`);
+    const events = await res.json();
+    renderTimeline(events);
+}
+
+function renderTimeline(events) {
+    const list = document.getElementById('timeline-list');
+    if (!events.length) {
+        list.innerHTML = renderEmptyState('📖', 'Henüz anı yok', 'Restoran ekleyip ziyaret kaydı oluşturun, anılarınız burada birikecek');
+        return;
+    }
+    list.innerHTML = events.map(e => {
+        const isSpecial = e.isSpecial || (e.tags || []).some(t => SPECIAL_TAGS.has(t));
+        const parts = formatDateParts(e.date);
+        return `<div class="timeline-item">
+            <div class="date-badge ${isSpecial ? 'special' : ''}">
+                <span class="day">${parts.day}</span>
+                <span class="month">${parts.month}</span>
+            </div>
+            <div class="timeline-content ${isSpecial ? 'special-glow' : ''}">
+                <p class="font-display font-semibold theme-text">${escapeHtml(e.restaurantName)} ${isSpecial ? '✨' : ''}</p>
+                ${e.notes ? `<p class="text-sm italic mt-2 opacity-80">"${escapeHtml(e.notes)}"</p>` : ''}
+                ${e.dishes?.length ? `<p class="text-xs mt-1 opacity-60">🍽 ${e.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
+                ${renderTags(e.tags)}
+                ${e.photos?.length ? renderPhotoStrip(e.photos, `timeline-${e.id}`) : ''}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// --- WISHLIST ---
+async function loadWishlist() {
+    const res = await fetch(`${API}/wishlist`);
+    allWishlist = await res.json();
+    renderWishlist();
+    if (currentView === 'map') renderMap();
+}
+
+function renderWishlist() {
+    const list = document.getElementById('wishlist-list');
+    if (!allWishlist.length) {
+        list.innerHTML = renderEmptyState('📌', 'İstek listesi boş', 'Gitmek istediğiniz restoranları buraya ekleyin', '<button onclick="openWishlistAddModal()" class="btn-primary">İlk İsteği Ekle</button>');
+        return;
+    }
+    list.innerHTML = allWishlist.map(w => `
+        <div class="wishlist-card">
+            <div class="wishlist-icon">📌</div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-800">${escapeHtml(w.name)}</p>
+                <p class="text-sm text-gray-500">${escapeHtml(w.location || '')}</p>
+                ${w.notes ? `<p class="text-xs text-gray-400 mt-1 italic">"${escapeHtml(w.notes)}"</p>` : ''}
+            </div>
+            <div class="flex flex-col gap-1 shrink-0">
+                <button onclick="visitFromWishlist('${w.id}')" class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100 font-medium">Gittik!</button>
+                <button onclick="deleteWishlistItem('${w.id}')" class="text-xs text-red-400 px-3 py-1 hover:underline">Sil</button>
+            </div>
+        </div>`).join('');
+}
+
+function openWishlistAddModal() {
+    closeFabMenu();
+    const modal = document.getElementById('wishlist-modal');
+    modal.classList.remove('hidden');
+    modal.innerHTML = `<div class="modal-box">
+        <div class="flex justify-between mb-4"><h2 class="font-display font-semibold text-rose-700">İstek Listesine Ekle</h2>
+        <button onclick="closeModal('wishlist-modal')" class="text-2xl text-gray-400">×</button></div>
+        <form id="wishlist-form" class="space-y-4" onsubmit="submitWishlist(event)">
+            <div><label class="label">Restoran Adı *</label><input type="text" id="wishlist-name" required class="input" placeholder="Denemek istediğimiz yer"></div>
+            <div><label class="label">Konum</label>
+            <div class="flex gap-2"><input type="text" id="wishlist-location" class="input flex-1" placeholder="Google Maps linki">
+            <button type="button" onclick="geocodeLocation('wishlist')" class="btn-secondary shrink-0 text-xs">Bul</button></div>
+            <p id="wishlist-location-status" class="text-xs mt-1 hidden"></p></div>
+            <div><label class="label">Not</label><textarea id="wishlist-notes" rows="2" class="input resize-none" placeholder="Neden gitmek istiyoruz?"></textarea></div>
+            <button type="submit" class="btn-primary w-full">Listeye Ekle</button>
+        </form>
+    </div>`;
+    modal.onclick = e => { if (e.target === modal) closeModal('wishlist-modal'); };
+}
+
+async function submitWishlist(e) {
+    e.preventDefault();
+    const loc = document.getElementById('wishlist-location');
+    if (loc.value.trim() && !loc.dataset.lat) await geocodeLocation('wishlist');
+    const body = {
+        name: document.getElementById('wishlist-name').value,
+        location: loc.value,
+        notes: document.getElementById('wishlist-notes').value,
+        lat: loc.dataset.lat ? parseFloat(loc.dataset.lat) : null,
+        lng: loc.dataset.lng ? parseFloat(loc.dataset.lng) : null
+    };
+    await fetch(`${API}/wishlist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    closeModal('wishlist-modal');
+    showToast('İstek listesine eklendi!');
+    loadWishlist();
+    loadStats();
+}
+
+async function visitFromWishlist(id) {
+    const res = await fetch(`${API}/wishlist/${id}/visit`, { method: 'POST' });
+    if (res.ok) {
+        showToast('Restoran eklendi — gittiniz!');
+        loadWishlist();
+        loadRestaurants();
+        loadStats();
+    }
+}
+
+async function deleteWishlistItem(id) {
+    if (!confirm('İstek listesinden silinsin mi?')) return;
+    await fetch(`${API}/wishlist/${id}`, { method: 'DELETE' });
+    loadWishlist();
+    loadStats();
+}
+
+// --- ROULETTE ---
+function getRoulettePool(fromWishlist = false) {
+    if (fromWishlist) return [...allWishlist];
+    const favs = allRestaurants.filter(r => r.favorite);
+    return favs.length >= 2 ? favs : [...allRestaurants];
+}
+
+function rouletteSourceHint(pool, fromWishlist) {
+    if (fromWishlist) return `${pool.length} istek listesi öğesi arasından`;
+    const favs = allRestaurants.filter(r => r.favorite);
+    return `${pool.length} restoran arasından${favs.length >= 2 ? ' (favoriler)' : ''}`;
+}
+
+function shortRouletteName(name, max = 11) {
+    const n = (name || '').trim();
+    if (n.length <= max) return n;
+    return `${n.slice(0, max - 1)}…`;
+}
+
+function buildRouletteWheelHtml(pool) {
+    const n = pool.length;
+    if (!n) return '<div class="roulette-wheel-empty">Liste boş</div>';
+    const slice = 360 / n;
+    const stops = pool.map((_, i) => {
+        const c = ROULETTE_COLORS[i % ROULETTE_COLORS.length];
+        return `${c} ${(i * slice).toFixed(2)}deg ${((i + 1) * slice).toFixed(2)}deg`;
+    }).join(', ');
+    const labels = pool.map((r, i) => {
+        const angle = i * slice + slice / 2;
+        return `<span class="roulette-label" style="--a:${angle}deg">${escapeHtml(shortRouletteName(r.name))}</span>`;
+    }).join('');
+    return `<div class="roulette-wheel-face" style="background:conic-gradient(${stops})">${labels}<div class="roulette-hub"></div></div>`;
+}
+
+function renderRouletteWheel(pool, resetRotation = true) {
+    const wheel = document.getElementById('roulette-wheel');
+    if (!wheel) return;
+    if (resetRotation) {
+        rouletteRotation = 0;
+        wheel.style.transition = 'none';
+        wheel.style.transform = 'rotate(0deg)';
+        void wheel.offsetHeight;
+        wheel.style.transition = '';
+    }
+    wheel.innerHTML = buildRouletteWheelHtml(pool);
+}
+
+function updateRouletteSourceLabel() {
+    const el = document.getElementById('roulette-source-label');
+    if (el) el.textContent = rouletteSourceHint(roulettePool, rouletteFromWishlist);
+}
+
+function openRouletteModal() {
+    closeFabMenu();
+    rouletteFromWishlist = false;
+    roulettePool = getRoulettePool(false);
+    const modal = document.getElementById('roulette-modal');
+    modal.classList.remove('hidden');
+    modal.innerHTML = `<div class="modal-box text-center">
+        <div class="flex justify-between mb-4"><h2 class="font-display font-semibold theme-text">Bugün Nereye?</h2>
+        <button onclick="closeModal('roulette-modal')" class="text-2xl opacity-40">×</button></div>
+        <div class="roulette-wrap">
+            <div class="roulette-pointer" aria-hidden="true">▼</div>
+            <div id="roulette-wheel" class="roulette-wheel"></div>
+        </div>
+        <div id="roulette-result" class="roulette-result hidden"></div>
+        <p id="roulette-source-label" class="text-xs text-gray-400 mb-4">${rouletteSourceHint(roulettePool, false)}</p>
+        <button id="roulette-spin-btn" onclick="spinRoulette()" class="btn-primary w-full" ${roulettePool.length < 1 ? 'disabled' : ''}>Çevir!</button>
+        ${allWishlist.length ? `<button onclick="spinRoulette(true)" class="btn-secondary w-full mt-2">İstek listesinden seç (${allWishlist.length})</button>` : ''}
+    </div>`;
+    renderRouletteWheel(roulettePool, true);
+    modal.onclick = e => { if (e.target === modal) closeModal('roulette-modal'); };
+}
+
+function sameRoulettePool(a, b) {
+    if (a.length !== b.length) return false;
+    return a.every((r, i) => r.id === b[i]?.id);
+}
+
+function spinRoulette(fromWishlist = false) {
+    if (rouletteSpinning) return;
+    const pool = getRoulettePool(fromWishlist);
+    if (!pool.length) {
+        showToast(fromWishlist ? 'İstek listesi boş!' : 'Restoran yok!');
+        return;
+    }
+
+    if (fromWishlist !== rouletteFromWishlist || !sameRoulettePool(pool, roulettePool)) {
+        rouletteFromWishlist = fromWishlist;
+        roulettePool = pool;
+        renderRouletteWheel(pool, true);
+        updateRouletteSourceLabel();
+    } else {
+        roulettePool = pool;
+    }
+
+    rouletteSpinning = true;
+    const btn = document.getElementById('roulette-spin-btn');
+    if (btn) btn.disabled = true;
+    const wheel = document.getElementById('roulette-wheel');
+    const result = document.getElementById('roulette-result');
+    if (!wheel || !result) {
+        rouletteSpinning = false;
+        if (btn) btn.disabled = false;
+        return;
+    }
+    result.classList.add('hidden');
+    result.innerHTML = '';
+
+    const pickIndex = Math.floor(Math.random() * pool.length);
+    const pick = pool[pickIndex];
+    const slice = 360 / pool.length;
+    const segmentCenter = pickIndex * slice + slice / 2;
+    const extraTurns = 4 + Math.floor(Math.random() * 2);
+    const target = rouletteRotation + extraTurns * 360 + (360 - segmentCenter);
+    rouletteRotation = target;
+    wheel.style.transform = `rotate(${target}deg)`;
+
+    setTimeout(() => {
+        result.classList.remove('hidden');
+        const rating = !fromWishlist && pick.myRating != null
+            ? `<p class="roulette-result-rating">${avgRating(pick.myRating, pick.partnerRating)}★ ortalama</p>` : '';
+        result.innerHTML = `<p class="roulette-result-kicker">Bugün buraya gidelim!</p>
+            <p class="roulette-result-name">${escapeHtml(pick.name)}</p>
+            ${pick.location ? `<p class="roulette-result-sub">${escapeHtml(pick.location)}</p>` : ''}
+            ${rating}`;
+        rouletteSpinning = false;
+        if (btn) btn.disabled = false;
+    }, 3000);
+}
+
+// --- FAB ---
+function openFabMenu() {
+    document.getElementById('fab-menu').classList.toggle('hidden');
+}
+function closeFabMenu() {
+    document.getElementById('fab-menu').classList.add('hidden');
+}
+function fabAddRestaurant() {
+    closeFabMenu();
+    const form = document.getElementById('add-form');
+    const section = document.getElementById('add-section');
+    form.classList.remove('hidden');
+    document.getElementById('add-form-toggle').textContent = '−';
+    section.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('add-name')?.focus();
+}
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('#fab') && !e.target.closest('#fab-menu')) closeFabMenu();
+});
+
+// --- FAVORİ ---
+async function toggleFavorite(id) {
+    await fetch(`${API}/restaurants/${id}/favorite`, { method: 'POST' });
+    const btn = document.querySelector(`#card-${id} .fav-btn`);
+    if (btn) {
+        btn.classList.add('pop');
+        setTimeout(() => btn.classList.remove('pop'), 500);
+    }
+    loadRestaurants();
+    loadStats();
+}
+
+// --- ZİYARET ---
+function openVisitModal(id) {
+    visitRestaurantId = id;
+    visitPhotoData = [];
+    selectedVisitTags = [];
+    const modal = document.getElementById('visit-modal');
+    modal.classList.remove('hidden');
+    const today = new Date().toISOString().split('T')[0];
+    modal.innerHTML = `<div class="modal-box">
+        <div class="flex justify-between mb-4"><h2 class="font-semibold text-rose-700">Yeni Ziyaret Ekle</h2>
+        <button onclick="closeModal('visit-modal')" class="text-2xl text-gray-400">×</button></div>
+        <form id="visit-form" class="space-y-4" onsubmit="submitVisit(event)">
+            <div><label class="label">Tarih</label><input type="date" id="visit-date" class="input" value="${today}"></div>
+            <div><label class="label">Ne Yedik?</label><div id="visit-dishes" class="space-y-2"></div>
+            <button type="button" onclick="addDishRow('visit')" class="text-sm text-rose-500 hover:underline">+ Yemek ekle</button></div>
+            <div><label class="label">Özel Gün</label><div id="visit-tags" class="flex flex-wrap gap-2"></div></div>
+            <div><label class="label">Not</label><textarea id="visit-notes" rows="2" class="input resize-none"></textarea></div>
+            <div><label class="label">Fotoğraf</label><input type="file" id="visit-photos" accept="image/*" multiple class="file-input" onchange="handleVisitPhotos(event)">
+            <div id="visit-photo-preview" class="flex flex-wrap gap-2 mt-2"></div></div>
+            <button type="submit" class="btn-primary w-full">Ziyaret Ekle</button>
+        </form>
+    </div>`;
+    buildTagSelector('visit');
+    modal.onclick = e => { if (e.target === modal) closeModal('visit-modal'); };
+}
+
+async function handleVisitPhotos(e) {
+    const photos = await readFilesAsBase64(e.target.files);
+    visitPhotoData = [...visitPhotoData, ...photos];
+    renderPhotoPreviews('visit-photo-preview', visitPhotoData, true, 'removeVisitPhoto');
+    e.target.value = '';
+}
+function removeVisitPhoto(i) { visitPhotoData.splice(i, 1); renderPhotoPreviews('visit-photo-preview', visitPhotoData, true, 'removeVisitPhoto'); }
+
+async function submitVisit(e) {
+    e.preventDefault();
+    const body = {
+        date: document.getElementById('visit-date').value,
+        notes: document.getElementById('visit-notes').value,
+        dishes: getDishesFromForm('visit'),
+        tags: selectedVisitTags,
+        photos: visitPhotoData
+    };
+    await fetch(`${API}/restaurants/${visitRestaurantId}/visits`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+    closeModal('visit-modal');
+    showToast('Ziyaret eklendi!');
+    loadRestaurants();
+}
+
+// --- GEÇMİŞ ---
+async function openHistoryModal(id) {
+    const res = await fetch(`${API}/restaurants/${id}`);
+    const r = await res.json();
+    const modal = document.getElementById('history-modal');
+    modal.classList.remove('hidden');
+    const visits = [...(r.visits||[])].sort((a,b) => b.date.localeCompare(a.date));
+    modal.innerHTML = `<div class="modal-box">
+        <div class="flex justify-between mb-4"><h2 class="font-display font-semibold text-rose-700">${escapeHtml(r.name)} — Anılar</h2>
+        <button onclick="closeModal('history-modal')" class="text-2xl text-gray-400">×</button></div>
+        <div class="space-y-4">${visits.map(v => {
+            const isSpecial = (v.tags || []).some(t => SPECIAL_TAGS.has(t));
+            return `<div class="visit-history-item ${isSpecial ? 'special-memory' : ''}">
+                <div class="flex justify-between items-start">
+                    <p class="font-medium">${formatDate(v.date)} ${isSpecial ? '✨' : ''}</p>
+                    <button onclick="deleteVisit('${id}','${v.id}')" class="text-red-400 text-xs hover:underline">Sil</button>
+                </div>
+                ${v.notes ? `<p class="text-sm italic text-gray-600 mt-1">"${escapeHtml(v.notes)}"</p>` : ''}
+                ${v.dishes?.length ? `<p class="text-xs text-gray-500 mt-1">🍽 ${v.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
+                ${renderTags(v.tags)}
+                ${v.photos?.length ? renderPhotoStrip(v.photos, `history-${id}-${v.id}`) : ''}
+            </div>`;
+        }).join('')}</div>
+    </div>`;
+    modal.onclick = e => { if (e.target === modal) closeModal('history-modal'); };
+}
+
+async function deleteVisit(restaurantId, visitId) {
+    if (!confirm('Bu ziyareti silmek istediğine emin misin?')) return;
+    await fetch(`${API}/restaurants/${restaurantId}/visits/${visitId}`, { method: 'DELETE' });
+    closeModal('history-modal');
+    loadRestaurants();
+}
+
+// --- DÜZENLEME ---
+async function openEditModal(id) {
+    const res = await fetch(`${API}/restaurants/${id}`);
+    const r = await res.json();
+    const modal = document.getElementById('edit-modal');
+    modal.classList.remove('hidden');
+    modal.innerHTML = `<div class="modal-box">
+        <div class="flex justify-between mb-4"><h2 class="font-semibold text-rose-700">Düzenle</h2>
+        <button onclick="closeModal('edit-modal')" class="text-2xl text-gray-400">×</button></div>
+        <form id="edit-form" class="space-y-4" onsubmit="submitEdit(event,'${r.id}')">
+            <div><label class="label">Ad</label><input type="text" id="edit-name" class="input" value="${escapeHtml(r.name)}" required></div>
+            <div>
+                <label class="label">Konum</label>
+                <div class="flex gap-2"><input type="text" id="edit-location" class="input flex-1" value="${escapeHtml(r.location)}">
+                <button type="button" onclick="geocodeLocation('edit')" class="btn-secondary shrink-0 text-xs px-2">Bul</button></div>
+                <p id="edit-location-status" class="text-xs mt-1 hidden"></p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="label">Senin Puanın</label><div id="edit-my-rating" class="stars"></div><input type="hidden" id="edit-my-rating-val" value="${r.myRating}"></div>
+                <div><label class="label">Sevgilinin</label><div id="edit-partner-rating" class="stars"></div><input type="hidden" id="edit-partner-rating-val" value="${r.partnerRating}"></div>
+            </div>
+            <div><label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" id="edit-favorite" class="rounded text-rose-500" ${r.favorite?'checked':''}> Favori</label></div>
+            <div class="flex gap-3">
+                <button type="submit" class="btn-primary flex-1">Kaydet</button>
+                <button type="button" onclick="closeModal('edit-modal')" class="btn-secondary">İptal</button>
+            </div>
+        </form>
+    </div>`;
+    buildStarPicker('edit-my-rating', 'edit-my-rating-val', r.myRating);
+    buildStarPicker('edit-partner-rating', 'edit-partner-rating-val', r.partnerRating);
+    if (r.lat && r.lng) setLocationCoords('edit', r.lat, r.lng);
+    modal.onclick = e => { if (e.target === modal) closeModal('edit-modal'); };
+}
+
+async function submitEdit(e, id) {
+    e.preventDefault();
+    const loc = document.getElementById('edit-location');
+    if (loc.value.trim() && !loc.dataset.lat) await geocodeLocation('edit');
+    const body = {
+        name: document.getElementById('edit-name').value,
+        location: loc.value,
+        lat: loc.dataset.lat ? parseFloat(loc.dataset.lat) : null,
+        lng: loc.dataset.lng ? parseFloat(loc.dataset.lng) : null,
+        myRating: Number(document.getElementById('edit-my-rating-val').value),
+        partnerRating: Number(document.getElementById('edit-partner-rating-val').value),
+        categories: categoriesFromRatings(
+            document.getElementById('edit-my-rating-val').value,
+            document.getElementById('edit-partner-rating-val').value
+        ),
+        favorite: document.getElementById('edit-favorite').checked
+    };
+    await fetch(`${API}/restaurants/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    closeModal('edit-modal');
+    showToast('Güncellendi!');
+    loadRestaurants();
+}
+
+async function deleteRestaurant(id) {
+    const r = allRestaurants.find(x => x.id === id);
+    if (!confirm(`"${r?.name}" silinsin mi?`)) return;
+    await fetch(`${API}/restaurants/${id}`, { method: 'DELETE' });
+    loadRestaurants();
+}
+
+// --- EKLEME ---
+function toggleAddForm() {
+    const form = document.getElementById('add-form');
+    document.getElementById('add-form-toggle').textContent = form.classList.toggle('hidden') ? '+' : '−';
+}
+
+function setupUI() {
+    buildTagSelector('add');
+    addDishRow('add');
+    buildStarPicker('add-my-rating', 'add-my-rating-val', 3);
+    buildStarPicker('add-partner-rating', 'add-partner-rating-val', 3);
+    setDefaultDate();
+    setupNameAutocomplete('add-name', 'add-name-suggest');
+
+    document.getElementById('search-input').addEventListener('input', debounce(loadRestaurants, 300));
+    document.getElementById('sort-select').addEventListener('change', loadRestaurants);
+    document.getElementById('filter-favorite').addEventListener('change', loadRestaurants);
+    document.getElementById('add-photos').addEventListener('change', async e => {
+        const photos = await readFilesAsBase64(e.target.files);
+        addPhotoData = [...addPhotoData, ...photos];
+        renderPhotoPreviews('add-photo-preview', addPhotoData, true, 'removeAddPhoto');
+        e.target.value = '';
+    });
+    document.getElementById('add-form').addEventListener('submit', submitAdd);
+}
+
+function removeAddPhoto(i) { addPhotoData.splice(i, 1); renderPhotoPreviews('add-photo-preview', addPhotoData, true, 'removeAddPhoto'); }
+function setDefaultDate() {
+    const el = document.getElementById('add-last-visited');
+    if (el) el.value = new Date().toISOString().split('T')[0];
+}
+
+async function submitAdd(e) {
+    e.preventDefault();
+    const loc = document.getElementById('add-location');
+    if (loc.value.trim() && !loc.dataset.lat) await geocodeLocation('add');
+    const body = {
+        name: document.getElementById('add-name').value,
+        location: loc.value,
+        lat: loc.dataset.lat ? parseFloat(loc.dataset.lat) : null,
+        lng: loc.dataset.lng ? parseFloat(loc.dataset.lng) : null,
+        myRating: Number(document.getElementById('add-my-rating-val').value),
+        partnerRating: Number(document.getElementById('add-partner-rating-val').value),
+        categories: categoriesFromRatings(
+            document.getElementById('add-my-rating-val').value,
+            document.getElementById('add-partner-rating-val').value
+        ),
+        notes: document.getElementById('add-notes').value,
+        photos: addPhotoData,
+        lastVisited: document.getElementById('add-last-visited').value,
+        dishes: getDishesFromForm('add'),
+        tags: selectedAddTags,
+        favorite: document.getElementById('add-favorite').checked
+    };
+    const res = await fetch(`${API}/restaurants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.ok) {
+        sessionStorage.setItem('toast', 'Restoran eklendi!');
+        location.reload();
+        return;
+    }
+    showToast('Eklenemedi, tekrar deneyin');
+}
+
+function debounce(fn, ms) {
+    let t;
+    return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+initApp();

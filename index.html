@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="rose">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bizim Restoranlarımız</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="font-sans">
+
+    <div class="bg-blobs" aria-hidden="true">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <!-- Giriş -->
+    <div id="login-screen" class="login-screen hidden">
+        <div class="login-card card">
+            <div class="login-hearts">💕</div>
+            <div class="login-icon">🍽️</div>
+            <h1 id="login-title" class="font-display login-title">Bizim Restoranlarımız</h1>
+            <p id="login-subtitle" class="login-subtitle">Lezzet günlüğünüze hoş geldiniz</p>
+            <input type="password" id="login-password" placeholder="Şifre" class="input login-input">
+            <button onclick="login()" class="btn-primary w-full login-btn">Giriş Yap</button>
+            <p id="login-error" class="text-red-500 text-sm mt-3 hidden">Yanlış şifre</p>
+        </div>
+    </div>
+
+    <div id="app" class="hidden">
+        <header class="app-header">
+            <div class="max-w-5xl mx-auto px-4 py-3">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <h1 id="app-title" class="font-display app-title">Bizim Restoranlarımız</h1>
+                        <p id="app-subtitle" class="app-subtitle">Birlikte keşfettiğimiz lezzetler</p>
+                    </div>
+                    <div class="header-actions">
+                        <button onclick="openShareCardModal()" class="icon-btn" title="Paylaş">📤</button>
+                        <button onclick="openRouletteModal()" class="icon-btn" title="Nereye gidelim?">🎲</button>
+                        <button onclick="openSettingsModal()" class="icon-btn" title="Ayarlar">⚙️</button>
+                        <button onclick="logout()" class="icon-btn icon-btn-muted" title="Çıkış">↗</button>
+                    </div>
+                </div>
+                <div class="search-bar mt-3">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="search-input" placeholder="Restoran ara..." class="search-input">
+                </div>
+                <div class="toolbar mt-3">
+                    <select id="sort-select" class="toolbar-select">
+                        <option value="rating">⭐ En yüksek puan</option>
+                        <option value="visits">🔄 En çok gidilen</option>
+                        <option value="date">📅 En son ziyaret</option>
+                        <option value="name">🔤 İsme göre</option>
+                    </select>
+                    <label class="toolbar-fav">
+                        <input type="checkbox" id="filter-favorite"> ❤️
+                    </label>
+                    <div class="view-tabs">
+                        <button id="view-list" onclick="setView('list')" class="view-tab-icon active" title="Liste">📋</button>
+                        <button id="view-map" onclick="setView('map')" class="view-tab-icon" title="Harita">🗺️</button>
+                        <button id="view-timeline" onclick="setView('timeline')" class="view-tab-icon" title="Anılar">📖</button>
+                        <button id="view-wishlist" onclick="setView('wishlist')" class="view-tab-icon" title="İstek listesi">📌</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+            <section id="dashboard" class="dashboard-section"></section>
+
+            <div id="map-container" class="hidden card rounded-2xl overflow-hidden h-80 shadow-sm"></div>
+
+            <section id="add-section" class="card rounded-2xl p-6 shadow-sm">
+                <button onclick="toggleAddForm()" class="flex items-center justify-between w-full text-left">
+                    <h2 class="section-title">Yeni Restoran Ekle</h2>
+                    <span id="add-form-toggle" class="text-xl theme-text">+</span>
+                </button>
+                <form id="add-form" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                    <div class="sm:col-span-2 relative">
+                        <label class="label">Restoran Adı *</label>
+                        <div class="flex gap-2">
+                            <div class="relative flex-1">
+                                <input type="text" id="add-name" required autocomplete="off" class="input" placeholder="Yazmaya başla...">
+                                <div id="add-name-suggest" class="suggest-dropdown hidden absolute left-0 right-0 top-full mt-1 bg-white border border-rose-200 rounded-xl shadow-lg z-20"></div>
+                            </div>
+                            <button type="button" onclick="openNamePicker('add')" class="btn-secondary shrink-0">Listeden Seç</button>
+                        </div>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="label">Konum <span class="text-gray-400 font-normal">(harita için)</span></label>
+                        <div class="flex gap-2">
+                            <input type="text" id="add-location" class="input flex-1" placeholder="Google Maps linki veya Kadıköy Moda">
+                            <button type="button" onclick="geocodeLocation('add')" class="btn-secondary shrink-0">Konumu Bul</button>
+                        </div>
+                        <p id="add-location-status" class="text-xs mt-1 hidden"></p>
+                    </div>
+                    <div><label class="label">Senin Puanın</label><div id="add-my-rating" class="stars"></div><input type="hidden" id="add-my-rating-val" value="3"></div>
+                    <div><label class="label">Sevgilinin Puanı</label><div id="add-partner-rating" class="stars"></div><input type="hidden" id="add-partner-rating-val" value="3"></div>
+                    <div><label class="label">Ziyaret Tarihi</label><input type="date" id="add-last-visited" class="input"></div>
+                    <div class="sm:col-span-2">
+                        <label class="label">Ne Yedik?</label>
+                        <div id="add-dishes" class="space-y-2"></div>
+                        <button type="button" onclick="addDishRow('add')" class="text-sm theme-text mt-1 hover:underline">+ Yemek ekle</button>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="label">Özel Gün Etiketleri</label>
+                        <div id="add-tags" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    <div class="sm:col-span-2"><label class="label">Not / Yorum</label><textarea id="add-notes" rows="2" class="input resize-none" placeholder="Neler beğendiniz?"></textarea></div>
+                    <div class="sm:col-span-2">
+                        <label class="label">Fotoğraflar</label>
+                        <input type="file" id="add-photos" accept="image/*" multiple class="file-input">
+                        <div id="add-photo-preview" class="flex flex-wrap gap-2 mt-2"></div>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" id="add-favorite" class="rounded"> Tekrar gidelim (Favori)</label>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <button type="submit" class="btn-primary">Ekle</button>
+                    </div>
+                </form>
+            </section>
+
+            <section id="list-section">
+                <h2 class="section-title mb-4">Restoranlarımız</h2>
+                <div id="restaurant-list" class="restaurant-list-grid">
+                    <div class="skeleton-card"></div>
+                    <div class="skeleton-card"></div>
+                </div>
+            </section>
+
+            <section id="timeline-section" class="hidden">
+                <h2 class="section-title mb-4">Anı Defterimiz</h2>
+                <div id="timeline-list" class="space-y-0"></div>
+            </section>
+
+            <section id="wishlist-section" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="section-title">Gitmek İstediklerimiz</h2>
+                    <button onclick="openWishlistAddModal()" class="btn-secondary text-sm">+ Ekle</button>
+                </div>
+                <div id="wishlist-list" class="space-y-3"></div>
+            </section>
+        </main>
+
+        <button id="fab" onclick="openFabMenu()" class="fab" title="Hızlı ekle">+</button>
+        <div id="fab-menu" class="fab-menu hidden">
+            <button onclick="fabAddRestaurant()" class="fab-menu-item">🍽 Restoran Ekle</button>
+            <button onclick="openWishlistAddModal()" class="fab-menu-item">📌 İstek Listesine Ekle</button>
+            <button onclick="openRouletteModal()" class="fab-menu-item">🎲 Nereye Gidelim?</button>
+        </div>
+    </div>
+
+    <div id="name-picker-modal" class="modal hidden"></div>
+    <div id="edit-modal" class="modal hidden"></div>
+    <div id="visit-modal" class="modal hidden"></div>
+    <div id="history-modal" class="modal hidden"></div>
+    <div id="detail-modal" class="modal modal-sheet hidden"></div>
+    <div id="settings-modal" class="modal hidden"></div>
+    <div id="share-card-modal" class="modal hidden"></div>
+    <input type="file" id="backup-file-input" accept=".json,application/json" class="hidden" onchange="importBackup(event)">
+    <div id="roulette-modal" class="modal hidden"></div>
+    <div id="wishlist-modal" class="modal hidden"></div>
+    <div id="photo-lightbox" class="lightbox hidden" onclick="closeLightbox(event)">
+        <button type="button" class="lightbox-close" onclick="closeLightbox(event)">×</button>
+        <button type="button" id="lightbox-prev" class="lightbox-nav lightbox-prev hidden" onclick="lightboxNav(-1, event)">‹</button>
+        <img id="lightbox-img" src="" class="lightbox-img" onclick="event.stopPropagation()">
+        <button type="button" id="lightbox-next" class="lightbox-nav lightbox-next hidden" onclick="lightboxNav(1, event)">›</button>
+        <div id="lightbox-counter" class="lightbox-counter"></div>
+    </div>
+    <div id="toast" class="toast"><span id="toast-icon">✓</span><span id="toast-msg"></span></div>
+
+    <script src="app.js"></script>
+</body>
+</html>

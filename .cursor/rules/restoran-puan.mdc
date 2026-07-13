@@ -1,0 +1,27 @@
+---
+description: Restoran Puan uygulaması proje bağlamı ve bilinen sorunlar
+globs: restoran-puan/**
+alwaysApply: false
+---
+
+# Restoran Puan
+
+**Yol:** `restoran-puan/` — Node.js + Express (port 3001), `data.json`, vanilla HTML/JS, Tailwind CDN, Leaflet.
+
+**Şifre:** `bizim123` | **Kullanıcılar:** Reco & Nisa
+
+## Ana dosyalar
+- `server.js` — API, geocode, wishlist, settings (theme)
+- `app.js` — tüm frontend mantığı
+- `index.html`, `styles.css` — UI (4 tema: rose/dark/cream/lavender)
+
+## Tamamlanan (Tem 2026)
+Görsel yenileme, tema seçici, dashboard stats, compact kartlar, timeline date-badge, card-perfect (5★), favori pop animasyonu.
+
+## Açık bug
+_(yok — çark düzeltildi Tem 2026)_
+
+## Tercihler
+- Türkçe iletişim
+- Git commit sadece istenirse
+- Minimal diff, mevcut convention'lara uy
