@@ -751,18 +751,47 @@ function renderTags(tags, special = true) {
 // --- GEOCODE ---
 function parseCoordsClient(text) {
     const trimmed = text.trim();
-    const direct = trimmed.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    const coordNum = '-?\\d+(?:\\.\\d+)?';
+    const valid = (lat, lng) => lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+
+    const direct = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
     if (direct) {
         const lat = parseFloat(direct[1]);
         const lng = parseFloat(direct[2]);
-        if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
+        if (valid(lat, lng)) return { lat, lng };
     }
-    if (/google|goo\.gl|maps\.app/i.test(trimmed)) {
-        const m = trimmed.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/)
-            || trimmed.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/)
-            || trimmed.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-        if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+
+    if (!/(?:google\.com\/maps|maps\.google\.|goo\.gl\/maps|maps\.app\.goo\.gl|share\.google)/i.test(trimmed)) {
+        return null;
     }
+
+    let decoded = trimmed;
+    try {
+        decoded = decodeURIComponent(trimmed.replace(/\+/g, ' '));
+    } catch { /* keep original */ }
+
+    const lat3 = decoded.match(new RegExp(`[!%]3d(${coordNum})`, 'i'));
+    const lng4 = decoded.match(new RegExp(`[!%]4d(${coordNum})`, 'i'));
+    if (lat3 && lng4) {
+        const lat = parseFloat(lat3[1]);
+        const lng = parseFloat(lng4[1]);
+        if (valid(lat, lng)) return { lat, lng };
+    }
+
+    const patterns = [
+        new RegExp(`@(${coordNum}),(${coordNum})`),
+        /[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        new RegExp(`/dir/(?:[^/]*/)*(${coordNum}),(${coordNum})`)
+    ];
+    for (const pattern of patterns) {
+        const match = decoded.match(pattern);
+        if (!match) continue;
+        const lat = parseFloat(match[1]);
+        const lng = parseFloat(match[2]);
+        if (valid(lat, lng)) return { lat, lng };
+    }
+
     return null;
 }
 

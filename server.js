@@ -200,52 +200,163 @@ app.use((req, res, next) => {
 });
 
 // --- GEOCODE ---
+const COORD_NUM = '-?\\d+(?:\\.\\d+)?';
+
+function validCoords(lat, lng) {
+    return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+}
+
+function safeDecodeUrl(text) {
+    let decoded = text;
+    for (let i = 0; i < 2; i++) {
+        try {
+            const next = decodeURIComponent(decoded.replace(/\+/g, ' '));
+            if (next === decoded) break;
+            decoded = next;
+        } catch {
+            break;
+        }
+    }
+    return decoded;
+}
+
+function isGoogleMapsUrl(text) {
+    return /(?:google\.com\/maps|maps\.google\.|goo\.gl\/maps|maps\.app\.goo\.gl|share\.google)/i.test(text);
+}
+
+function isShortGoogleMapsUrl(text) {
+    return /(?:goo\.gl\/maps|maps\.app\.goo\.gl)/i.test(text);
+}
+
+function parseCoordsFromGoogleUrl(text) {
+    const decoded = safeDecodeUrl(text);
+
+    const lat3 = decoded.match(new RegExp(`[!%]3d(${COORD_NUM})`, 'i'));
+    const lng4 = decoded.match(new RegExp(`[!%]4d(${COORD_NUM})`, 'i'));
+    if (lat3 && lng4) {
+        const lat = parseFloat(lat3[1]);
+        const lng = parseFloat(lng4[1]);
+        if (validCoords(lat, lng)) return { lat, lng, display: 'Google Maps' };
+    }
+
+    const at = decoded.match(new RegExp(`@(${COORD_NUM}),(${COORD_NUM})`));
+    if (at) {
+        const lat = parseFloat(at[1]);
+        const lng = parseFloat(at[2]);
+        if (validCoords(lat, lng)) return { lat, lng, display: 'Google Maps' };
+    }
+
+    const paramPatterns = [
+        /[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]sll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]center=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]destination=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/,
+        /[?&]daddr=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/
+    ];
+    for (const pattern of paramPatterns) {
+        const match = decoded.match(pattern);
+        if (!match) continue;
+        const lat = parseFloat(match[1]);
+        const lng = parseFloat(match[2]);
+        if (validCoords(lat, lng)) return { lat, lng, display: 'Google Maps' };
+    }
+
+    const dir = decoded.match(new RegExp(`/dir/(?:[^/]*/)*(${COORD_NUM}),(${COORD_NUM})`));
+    if (dir) {
+        const lat = parseFloat(dir[1]);
+        const lng = parseFloat(dir[2]);
+        if (validCoords(lat, lng)) return { lat, lng, display: 'Google Maps' };
+    }
+
+    return null;
+}
+
+function extractPlaceNameFromGoogleUrl(text) {
+    const decoded = safeDecodeUrl(text);
+    const match = decoded.match(/\/(?:place|search)\/([^/@?&]+)/);
+    if (!match) return null;
+    const name = match[1].replace(/\+/g, ' ').trim();
+    if (!name || new RegExp(`^${COORD_NUM},${COORD_NUM}$`).test(name)) return null;
+    return name;
+}
+
 function parseCoordsFromText(text) {
     const trimmed = text.trim();
 
-    const direct = trimmed.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    const direct = trimmed.match(/^(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)$/);
     if (direct) {
         const lat = parseFloat(direct[1]);
         const lng = parseFloat(direct[2]);
-        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        if (validCoords(lat, lng)) {
             return { lat, lng, display: `${lat}, ${lng}` };
         }
     }
 
-    if (/google\.com\/maps|maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(trimmed)) {
-        const precise = trimmed.match(/!3d(-?\d+\.?\d+)!4d(-?\d+\.?\d+)/);
-        if (precise) {
-            return { lat: parseFloat(precise[1]), lng: parseFloat(precise[2]), display: 'Google Maps' };
-        }
-        const at = trimmed.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-        if (at) {
-            return { lat: parseFloat(at[1]), lng: parseFloat(at[2]), display: 'Google Maps' };
-        }
-        const qParam = trimmed.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
-        if (qParam) {
-            return { lat: parseFloat(qParam[1]), lng: parseFloat(qParam[2]), display: 'Google Maps' };
-        }
+    if (isGoogleMapsUrl(trimmed)) {
+        const coords = parseCoordsFromGoogleUrl(trimmed);
+        if (coords) return coords;
+
+        const placeName = extractPlaceNameFromGoogleUrl(trimmed);
+        if (placeName) return { placeName, display: placeName };
+
         return { needsResolve: true, url: trimmed };
     }
 
     return null;
 }
 
-async function resolveGoogleShortUrl(url) {
-    const response = await fetch(url, {
-        redirect: 'follow',
-        headers: { 'User-Agent': 'RestoranPuan/1.0 (personal app)' }
-    });
-    return response.url;
+async function resolveGoogleShortUrl(url, maxHops = 8) {
+    let current = url;
+    for (let hop = 0; hop < maxHops; hop++) {
+        const response = await fetch(current, {
+            redirect: 'manual',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (compatible; RestoranPuan/1.0)',
+                Accept: 'text/html,application/xhtml+xml'
+            }
+        });
+        if (response.status >= 300 && response.status < 400) {
+            const location = response.headers.get('location');
+            if (!location) break;
+            current = new URL(location, current).href;
+            continue;
+        }
+        return response.url || current;
+    }
+    return current;
 }
 
 async function nominatimSearch(query) {
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=3&countrycodes=tr`;
     const response = await fetch(url, {
-        headers: { 'User-Agent': 'RestoranPuan/1.0 (personal couple app)' }
+        headers: {
+            'User-Agent': 'RestoranPuan/1.0 (personal couple app)',
+            'Accept-Language': 'tr'
+        }
     });
     if (!response.ok) throw new Error(`Nominatim ${response.status}`);
     return response.json();
+}
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function buildGeocodeQueries(q, name, parsed) {
+    const queries = [];
+    const placeName = parsed?.placeName || extractPlaceNameFromGoogleUrl(q);
+
+    if (placeName) {
+        if (name) queries.push(`${name} ${placeName}, İstanbul, Türkiye`, `${name}, ${placeName}, Türkiye`);
+        queries.push(`${placeName}, İstanbul, Türkiye`, `${placeName}, Türkiye`);
+    }
+    if (name && !isGoogleMapsUrl(q)) {
+        queries.push(`${name}, ${q}, Türkiye`, `${name} ${q}, Türkiye`);
+    }
+    if (!isGoogleMapsUrl(q)) {
+        queries.push(`${q}, Türkiye`, q);
+    }
+
+    return [...new Set(queries.filter(Boolean))];
 }
 
 app.get('/geocode', async (req, res) => {
@@ -255,26 +366,34 @@ app.get('/geocode', async (req, res) => {
 
     try {
         let parsed = parseCoordsFromText(q);
+
         if (parsed?.needsResolve) {
-            const resolved = await resolveGoogleShortUrl(parsed.url);
-            parsed = parseCoordsFromText(resolved);
+            let resolvedUrl = parsed.url;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const nextUrl = await resolveGoogleShortUrl(resolvedUrl);
+                if (nextUrl === resolvedUrl && attempt > 0) break;
+                resolvedUrl = nextUrl;
+
+                const coords = parseCoordsFromGoogleUrl(resolvedUrl);
+                if (coords) {
+                    return res.json({ lat: coords.lat, lng: coords.lng, display: coords.display || 'Google Maps' });
+                }
+
+                const placeName = extractPlaceNameFromGoogleUrl(resolvedUrl);
+                if (placeName) parsed = { ...parsed, placeName };
+
+                if (!isShortGoogleMapsUrl(resolvedUrl)) break;
+            }
         }
+
         if (parsed?.lat != null && parsed?.lng != null) {
             return res.json({ lat: parsed.lat, lng: parsed.lng, display: parsed.display || q });
         }
 
-        const queries = [];
-        if (name) {
-            queries.push(`${name}, ${q}, Türkiye`);
-            queries.push(`${name} ${q}, Türkiye`);
-        }
-        queries.push(`${q}, Türkiye`, q);
-
-        const seen = new Set();
-        for (const query of queries) {
-            if (seen.has(query)) continue;
-            seen.add(query);
-            const data = await nominatimSearch(query);
+        const queries = buildGeocodeQueries(q, name, parsed);
+        for (let i = 0; i < queries.length; i++) {
+            if (i > 0) await sleep(1100);
+            const data = await nominatimSearch(queries[i]);
             if (data[0]) {
                 return res.json({
                     lat: parseFloat(data[0].lat),
@@ -284,7 +403,9 @@ app.get('/geocode', async (req, res) => {
             }
         }
 
-        res.status(404).json({ error: 'Konum bulunamadı — Google Maps linki yapıştırmayı deneyin' });
+        res.status(404).json({
+            error: 'Konum bulunamadı — Google Maps\'ten "Paylaş" linkini yapıştırın veya koordinat girin (41.00, 29.00)'
+        });
     } catch (err) {
         console.error('Geocode error:', err.message);
         res.status(500).json({ error: 'Konum aranırken hata oluştu' });
