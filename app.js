@@ -1144,7 +1144,7 @@ function renderDashboard(s) {
         <div class="dash-summary">
             <div class="dash-stat"><span class="dash-stat-value">${s.restaurantCount}</span><span class="dash-stat-label">Restoran</span></div>
             <div class="dash-stat"><span class="dash-stat-value">${s.visitCount}</span><span class="dash-stat-label">Ziyaret</span></div>
-            <div class="dash-stat"><span class="dash-stat-value">${s.favoriteCount}</span><span class="dash-stat-label">Favori</span></div>
+            <div class="dash-stat"><span class="dash-stat-value">${s.favoriteCount}</span><span class="dash-stat-label">Favori <span class="heart-tiny" aria-hidden="true">♥</span></span></div>
             <div class="dash-stat"><span class="dash-stat-value">${s.wishlistCount || 0}</span><span class="dash-stat-label">İstek</span></div>
         </div>
         ${highlights.length ? `<div class="dash-highlights">${highlights.map(h => `
