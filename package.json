@@ -1,6 +1,6 @@
 {
   "name": "restoran-puan",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Sevgilinle gittiğin restoranları puanla",
   "main": "server.js",
   "scripts": {

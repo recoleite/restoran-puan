@@ -1201,8 +1201,8 @@ body.auth-pending { visibility: hidden; }
 .detail-visit-badge { font-size: 0.65rem; font-weight: 600; color: var(--gold); text-transform: uppercase; letter-spacing: 0.04em; }
 .detail-visit-note { font-size: 0.82rem; font-style: italic; color: var(--text-muted); margin: 0.15rem 0 0; line-height: 1.45; }
 .detail-visit-dishes { font-size: 0.72rem; color: var(--text-soft); margin: 0.25rem 0 0; }
-.detail-actions { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
-.detail-action-btn { padding: 0.55rem 0.2rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-muted); font: inherit; font-size: 0.62rem; font-weight: 600; cursor: pointer; text-align: center; }
+.detail-actions { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.35rem; padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--border); }
+.detail-action-btn { padding: 0.55rem 0.15rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text-muted); font: inherit; font-size: 0.58rem; font-weight: 600; cursor: pointer; text-align: center; }
 .detail-action-btn:hover { background: var(--surface-2); color: var(--text); }
 .detail-action-btn.primary { border-color: transparent; color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 2px 8px var(--accent-glow); }
 .detail-action-btn.danger:hover { border-color: #fecaca; color: #dc2626; background: #fef2f2; }
