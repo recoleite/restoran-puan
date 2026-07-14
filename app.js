@@ -1503,6 +1503,37 @@ function renderVisitHistory(visits, restaurantId) {
     </div>`;
 }
 
+function renderCoverRatingBadge(avg, perfect) {
+    const stars = renderStars(Math.round(parseFloat(avg)), 'on-dark');
+    if (perfect) {
+        return `<div class="card-score-stack">
+            <span class="card-score-label">Mükemmel</span>
+            <div class="cover-rating-badge cover-rating-badge-stacked">
+                <span class="score">${avg}</span>
+                <span class="stars stars-compact">${stars}</span>
+            </div>
+        </div>`;
+    }
+    return `<div class="cover-rating-badge">
+        <span class="score">${avg}</span>
+        <span class="stars stars-compact">${stars}</span>
+    </div>`;
+}
+
+function renderPlaceholderRating(avg, perfect) {
+    const stars = renderStars(Math.round(parseFloat(avg)));
+    if (perfect) {
+        return `<div class="card-rating-unit">
+            <span class="card-score-label">Mükemmel</span>
+            <div class="placeholder-rating-pill">
+                <span class="score">${avg}</span>
+                <span class="stars stars-compact">${stars}</span>
+            </div>
+        </div>`;
+    }
+    return `<span class="rating-inline">${avg} · ${stars}</span>`;
+}
+
 function renderRestaurantCard(r, index) {
     const avg = avgRating(r.myRating, r.partnerRating);
     const cover = getCoverPhoto(r);
@@ -1519,9 +1550,8 @@ function renderRestaurantCard(r, index) {
                 <div class="card-cover-overlay"></div>
                 <div class="card-cover-info"><h3>${escapeHtml(r.name)}</h3></div>
                 <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover${favClass}" aria-label="Favori">♥</button>
-                ${perfect ? '<span class="perfect-badge">Mükemmel</span>' : ''}
                 ${photoCount > 1 ? `<span class="cover-photo-badge">${photoCount} foto</span>` : ''}
-                <div class="cover-rating-badge"><span class="score">${avg}</span><span class="stars stars-compact">${renderStars(Math.round(avg), 'on-dark')}</span></div>
+                ${renderCoverRatingBadge(avg, perfect)}
             </div>
         </article>`;
     }
@@ -1529,10 +1559,9 @@ function renderRestaurantCard(r, index) {
     return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
         <div class="card-placeholder">
             <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn${favClass}" aria-label="Favori">♥</button>
-            ${perfect ? '<span class="perfect-badge">Mükemmel</span>' : ''}
             <span class="card-monogram">${initial}</span>
             <span class="name">${escapeHtml(r.name)}</span>
-            <span class="rating-inline">${avg} · ${renderStars(Math.round(avg))}</span>
+            ${renderPlaceholderRating(avg, perfect)}
         </div>
     </article>`;
 }

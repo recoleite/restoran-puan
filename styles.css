@@ -712,23 +712,72 @@ body {
 .restaurant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.85rem; }
 .restaurant-card { overflow: hidden; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); cursor: pointer; transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s; animation: fadeUp 0.35s ease both; box-shadow: 0 4px 14px var(--shadow); }
 .restaurant-card:hover { box-shadow: 0 10px 28px var(--shadow-lg); transform: translateY(-3px); border-color: var(--accent-muted); }
-.perfect-badge {
+.card-score-stack {
     position: absolute;
-    top: 10px;
+    bottom: 10px;
     right: 10px;
     z-index: 3;
-    padding: 0.2rem 0.5rem;
-    border-radius: 99px;
-    font-size: 0.58rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    min-width: 3.25rem;
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.28));
+}
+
+.card-score-label {
+    display: block;
+    padding: 0.2rem 0.45rem;
+    border-radius: 8px 8px 0 0;
+    font-size: 0.5rem;
     font-weight: 700;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    text-align: center;
+    line-height: 1.2;
     color: #78350f;
     background: linear-gradient(135deg, #fef3c7, #fde68a);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-bottom: none;
 }
-.card-cover .perfect-badge { top: auto; bottom: 44px; right: 10px; }
-.card-cover.has-perfect .cover-photo-badge { top: 36px; }
+
+.card-rating-unit {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    align-self: center;
+    width: fit-content;
+    min-width: 3.25rem;
+    max-width: 6.5rem;
+    margin-top: 0.35rem;
+    filter: drop-shadow(0 2px 6px var(--shadow));
+}
+
+.card-rating-unit .card-score-label {
+    border-radius: 8px 8px 0 0;
+}
+
+.placeholder-rating-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    padding: 0.3rem 0.55rem;
+    border-radius: 0 0 10px 10px;
+    background: rgba(12, 12, 18, 0.82);
+    border: 1px solid var(--border-strong);
+    border-top: none;
+}
+
+.placeholder-rating-pill .score {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.1;
+}
+
+.card-rating-unit .card-score-label + .placeholder-rating-pill {
+    border-top: none;
+}
 
 .stars.stars-max .star-btn { animation: starPop 0.45s ease; }
 @keyframes starPop {
@@ -748,7 +797,8 @@ body {
 .card-cover-img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s ease; }
 .card-cover:hover .card-cover-img { transform: scale(1.03); }
 .card-cover-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.55), transparent 50%); pointer-events: none; }
-.card-cover-info { position: absolute; bottom: 10px; left: 12px; right: 48px; color: white; z-index: 2; }
+.card-cover-info { position: absolute; bottom: 10px; left: 12px; right: 58px; color: white; z-index: 2; }
+.card-cover.has-perfect .card-cover-info { right: 62px; }
 .card-cover-info h3 { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.2rem; margin: 0; line-height: 1.2; text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
 .cover-rating-badge {
     position: absolute;
@@ -767,14 +817,34 @@ body {
     color: #fff;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
+.card-score-stack .cover-rating-badge,
+.cover-rating-badge-stacked {
+    position: static;
+    border-radius: 0 0 10px 10px;
+    border-top: none;
+    box-shadow: none;
+    min-width: 0;
+}
 .cover-rating-badge .score { color: #fff; display: block; line-height: 1.1; margin-bottom: 0.1rem; }
-.cover-rating-badge .stars-compact { font-size: 0.5rem; gap: 0.05rem; justify-content: center; }
+.cover-rating-badge .stars-compact { font-size: 0.5rem; gap: 0.05rem; justify-content: center; display: flex; }
 .cover-photo-badge { position: absolute; top: 10px; right: 10px; z-index: 2; background: rgba(0,0,0,0.5); color: white; font-size: 0.65rem; font-weight: 600; padding: 0.15rem 0.45rem; border-radius: 99px; }
 
-.card-placeholder { aspect-ratio: 4/3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem; background: linear-gradient(145deg, var(--accent-soft), var(--surface-2)); position: relative; }
+.card-placeholder { aspect-ratio: 4/3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; padding: 1rem 0.85rem 0.85rem; background: linear-gradient(145deg, var(--accent-soft), var(--surface-2)); position: relative; }
 .card-monogram { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.5rem; color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 2px solid color-mix(in srgb, white 60%, var(--accent-muted)); box-shadow: 0 4px 12px var(--accent-glow); }
-.card-placeholder .name { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.1rem; text-align: center; color: var(--text); line-height: 1.2; }
-.card-placeholder .rating-inline { font-size: 0.8rem; font-weight: 700; color: var(--accent); }
+.card-placeholder .name { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.1rem; text-align: center; color: var(--text); line-height: 1.2; margin-bottom: 0; }
+.card-placeholder .rating-inline { font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-top: 0.15rem; }
+.card-placeholder .card-rating-unit { margin-top: 0.2rem; }
+.card-placeholder .card-rating-unit .card-score-label {
+    border-color: color-mix(in srgb, var(--gold) 50%, var(--border));
+}
+.card-placeholder .placeholder-rating-pill {
+    background: var(--surface);
+    border-color: var(--border-strong);
+}
+.card-placeholder .placeholder-rating-pill .score { color: var(--accent); }
+.card-placeholder .placeholder-rating-pill .star-off { color: color-mix(in srgb, var(--border) 80%, transparent); }
+
+.card-placeholder .placeholder-rating-pill .stars-compact { display: flex; justify-content: center; gap: 0.05rem; font-size: 0.55rem; }
 
 .fav-btn { position: absolute; top: 10px; left: 10px; z-index: 3; width: 30px; height: 30px; border: none; border-radius: 50%; background: rgba(255,255,255,0.95); color: var(--text-soft); font-size: 0.8rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: transform 0.15s, color 0.15s, background 0.15s; line-height: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
 .fav-btn-cover { background: rgba(0,0,0,0.35); color: rgba(255,255,255,0.85); box-shadow: none; }
