@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const userStore = require('./userStore');
+const photoStore = require('./photoStore');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -42,7 +43,7 @@ const migrateRestaurant = (r) => {
         categories: r.categories ?? DEFAULT_CATEGORIES(),
         visits,
         visitCount: visits.length,
-        photos: visits.flatMap(v => v.photos || []).length ? visits.flatMap(v => v.photos || []) : (r.photos ?? [])
+        photos: []
     };
 };
 
@@ -55,9 +56,7 @@ function getRestaurantPhotos(r) {
 }
 
 function getCoverPhoto(r) {
-    if (r.coverPhoto) return r.coverPhoto;
-    const photos = getRestaurantPhotos(r);
-    return photos[0] || null;
+    return photoStore.getListCoverPhoto(r);
 }
 
 function countRestaurantPhotos(r) {
@@ -84,10 +83,6 @@ function toRestaurantListItem(r) {
 
 function applyCoverPhoto(restaurant, coverPhoto) {
     if (coverPhoto) restaurant.coverPhoto = coverPhoto;
-    else if (!restaurant.coverPhoto) {
-        const photos = getRestaurantPhotos(restaurant);
-        if (photos.length) restaurant.coverPhoto = photos[0];
-    }
 }
 
 const findRestaurant = (userDb, id) => userDb.restaurants.findIndex(r => r.id === id);
@@ -113,8 +108,7 @@ const syncRestaurantFromVisits = (restaurant) => {
     const sorted = [...restaurant.visits].sort((a, b) => b.date.localeCompare(a.date));
     restaurant.visitCount = restaurant.visits.length;
     restaurant.lastVisited = sorted[0].date;
-    const allPhotos = restaurant.visits.flatMap(v => v.photos || []);
-    restaurant.photos = allPhotos.length ? allPhotos : restaurant.photos || [];
+    restaurant.photos = [];
     restaurant.notes = sorted[0].notes || restaurant.notes || '';
     return restaurant;
 };
@@ -177,6 +171,20 @@ app.get('/auth/status', (req, res) => {
 
 app.get('/health', (req, res) => {
     res.json({ ok: true });
+});
+
+app.get('/photos/:userId/:filename', (req, res) => {
+    const { userId, filename } = req.params;
+    const sig = req.query.sig;
+    if (!filename || !photoStore.verifyPhotoAccess(userId, filename, sig)) {
+        return res.status(403).json({ error: 'Erişim reddedildi' });
+    }
+    const filePath = photoStore.resolvePhotoPath(userId, filename);
+    if (!filePath || !fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Fotoğraf bulunamadı' });
+    }
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.sendFile(filePath);
 });
 
 app.post('/auth/register', (req, res) => {
@@ -707,51 +715,65 @@ app.get('/restaurants/:id', (req, res) => {
     res.json(restaurant);
 });
 
-app.post('/restaurants', (req, res) => {
-    const {
-        name, cuisine, location, myRating, partnerRating, notes, lastVisited,
-        photos, favorite, lat, lng, categories, dishes, budget, tags, coverPhoto
-    } = req.body;
+app.post('/restaurants', async (req, res) => {
+    try {
+        const {
+            name, cuisine, location, myRating, partnerRating, notes, lastVisited,
+            photos, favorite, lat, lng, categories, dishes, budget, tags, coverPhoto
+        } = req.body;
 
-    if (!name?.trim()) return res.status(400).json({ error: 'Restoran adı zorunludur' });
+        if (!name?.trim()) return res.status(400).json({ error: 'Restoran adı zorunludur' });
 
-    const now = new Date().toISOString();
-    const date = lastVisited || now.split('T')[0];
-    const visitId = Date.now().toString();
+        const now = new Date().toISOString();
+        const date = lastVisited || now.split('T')[0];
+        const visitId = Date.now().toString();
+        const savedPhotos = await photoStore.normalizePhotoList(req.userId, Array.isArray(photos) ? photos : []);
 
-    const newRestaurant = {
-        id: visitId,
-        name: name.trim(),
-        cuisine: cuisine?.trim() || '',
-        location: location?.trim() || '',
-        lat: lat ?? null,
-        lng: lng ?? null,
-        myRating: clampRating(myRating ?? 3),
-        partnerRating: clampRating(partnerRating ?? 3),
-        categories: parseCategories(categories),
-        favorite: !!favorite,
-        visitCount: 1,
-        notes: notes?.trim() || '',
-        photos: Array.isArray(photos) ? photos : [],
-        visits: [{
-            id: `${visitId}-v1`,
-            date,
+        const newRestaurant = {
+            id: visitId,
+            name: name.trim(),
+            cuisine: cuisine?.trim() || '',
+            location: location?.trim() || '',
+            lat: lat ?? null,
+            lng: lng ?? null,
+            myRating: clampRating(myRating ?? 3),
+            partnerRating: clampRating(partnerRating ?? 3),
+            categories: parseCategories(categories),
+            favorite: !!favorite,
+            visitCount: 1,
             notes: notes?.trim() || '',
-            photos: Array.isArray(photos) ? photos : [],
-            dishes: Array.isArray(dishes) ? dishes : [],
-            budget: Number(budget) || 0,
-            tags: Array.isArray(tags) ? tags : []
-        }],
-        lastVisited: date,
-        createdAt: now,
-        updatedAt: now
-    };
-    applyCoverPhoto(newRestaurant, coverPhoto);
+            photos: [],
+            visits: [{
+                id: `${visitId}-v1`,
+                date,
+                notes: notes?.trim() || '',
+                photos: savedPhotos,
+                dishes: Array.isArray(dishes) ? dishes : [],
+                budget: Number(budget) || 0,
+                tags: Array.isArray(tags) ? tags : []
+            }],
+            lastVisited: date,
+            createdAt: now,
+            updatedAt: now,
+            coverPhoto: null
+        };
 
-    req.db.restaurants.unshift(newRestaurant);
-    upsertNameRegistry(req.db, newRestaurant.name, newRestaurant.cuisine, newRestaurant.location);
-    persist(req);
-    res.status(201).json(newRestaurant);
+        if (coverPhoto || savedPhotos.length) {
+            newRestaurant.coverPhoto = await photoStore.saveCoverForRestaurant(
+                req.userId,
+                visitId,
+                coverPhoto || savedPhotos[0]
+            );
+        }
+
+        req.db.restaurants.unshift(newRestaurant);
+        upsertNameRegistry(req.db, newRestaurant.name, newRestaurant.cuisine, newRestaurant.location);
+        persist(req);
+        res.status(201).json(newRestaurant);
+    } catch (err) {
+        console.error('Restoran eklenemedi:', err.message);
+        res.status(500).json({ error: 'Restoran kaydedilemedi' });
+    }
 });
 
 app.patch('/restaurants/:id', (req, res) => {
@@ -798,28 +820,42 @@ app.post('/restaurants/:id/favorite', (req, res) => {
 });
 
 // Ziyaret ekle (detaylı)
-app.post('/restaurants/:id/visits', (req, res) => {
-    const index = findRestaurant(req.db, req.params.id);
-    if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
+app.post('/restaurants/:id/visits', async (req, res) => {
+    try {
+        const index = findRestaurant(req.db, req.params.id);
+        if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
-    const { date, notes, photos, dishes, budget, tags, coverPhoto } = req.body;
-    const visit = {
-        id: Date.now().toString(),
-        date: date || new Date().toISOString().split('T')[0],
-        notes: notes?.trim() || '',
-        photos: Array.isArray(photos) ? photos : [],
-        dishes: Array.isArray(dishes) ? dishes : [],
-        budget: Number(budget) || 0,
-        tags: Array.isArray(tags) ? tags : []
-    };
+        const { date, notes, photos, dishes, budget, tags, coverPhoto } = req.body;
+        const savedPhotos = await photoStore.normalizePhotoList(req.userId, Array.isArray(photos) ? photos : []);
+        const visit = {
+            id: Date.now().toString(),
+            date: date || new Date().toISOString().split('T')[0],
+            notes: notes?.trim() || '',
+            photos: savedPhotos,
+            dishes: Array.isArray(dishes) ? dishes : [],
+            budget: Number(budget) || 0,
+            tags: Array.isArray(tags) ? tags : []
+        };
 
-    req.db.restaurants[index].visits = req.db.restaurants[index].visits || [];
-    req.db.restaurants[index].visits.unshift(visit);
-    syncRestaurantFromVisits(req.db.restaurants[index]);
-    applyCoverPhoto(req.db.restaurants[index], coverPhoto);
-    req.db.restaurants[index].updatedAt = new Date().toISOString();
-    persist(req);
-    res.json(req.db.restaurants[index]);
+        req.db.restaurants[index].visits = req.db.restaurants[index].visits || [];
+        req.db.restaurants[index].visits.unshift(visit);
+        syncRestaurantFromVisits(req.db.restaurants[index]);
+
+        if (coverPhoto || savedPhotos.length) {
+            req.db.restaurants[index].coverPhoto = await photoStore.saveCoverForRestaurant(
+                req.userId,
+                req.params.id,
+                coverPhoto || savedPhotos[0]
+            );
+        }
+
+        req.db.restaurants[index].updatedAt = new Date().toISOString();
+        persist(req);
+        res.json(req.db.restaurants[index]);
+    } catch (err) {
+        console.error('Ziyaret eklenemedi:', err.message);
+        res.status(500).json({ error: 'Ziyaret kaydedilemedi' });
+    }
 });
 
 app.patch('/restaurants/:id/visits/:visitId', (req, res) => {
@@ -880,6 +916,25 @@ app.delete('/restaurants/:id', (req, res) => {
     res.json({ success: true });
 });
 
+async function migrateAllPhotoStorage() {
+    try {
+        require('sharp');
+    } catch {
+        console.warn('sharp paketi yok; mevcut fotoğraflar JSON içinde kalacak');
+        return;
+    }
+    for (const userId of userStore.listUserIds()) {
+        const db = userStore.loadUserDb(userId);
+        db.restaurants = (db.restaurants || []).map(migrateRestaurant);
+        const changed = await photoStore.migrateUserDbPhotos(userId, db);
+        if (changed) {
+            userStore.saveUserDb(userId, db);
+            console.log(`Fotoğraflar diske taşındı (${userId})`);
+        }
+    }
+}
+
 app.listen(PORT, () => {
     console.log(`Restoran Puanlama sunucusu http://localhost:${PORT} adresinde çalışıyor`);
+    migrateAllPhotoStorage().catch(err => console.error('Fotoğraf migrasyonu başarısız:', err.message));
 });

@@ -117,6 +117,10 @@ function createUser({ email, password, displayName = '', coupleName1 = '', coupl
     return user;
 }
 
+function listUserIds() {
+    return readUsersIndex().map(u => u.id);
+}
+
 function loadUserDb(userId) {
     const file = userDbPath(userId);
     if (!fs.existsSync(file)) return defaultUserDb();
@@ -200,6 +204,7 @@ module.exports = {
     createUser,
     findUserByEmail,
     findUserById,
+    listUserIds,
     loadUserDb,
     migrateLegacyDataIfNeeded,
     saveUserDb,
