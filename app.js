@@ -1,4 +1,5 @@
 const API = '';
+const LOGIN_URL = '/login.html';
 const TAG_PRESETS = ['İlk buluşma', 'Doğum günü', 'Yıldönümü', 'Özel gün', 'Kutlama'];
 const SPECIAL_TAGS = new Set(TAG_PRESETS);
 const DEFAULT_SORT = 'date';
@@ -141,33 +142,33 @@ function rotateSubtitle(reset = false) {
 }
 
 const nativeFetch = window.fetch.bind(window);
-window.fetch = (url, options = {}) => {
+window.fetch = async (url, options = {}) => {
     const headers = new Headers(options.headers || {});
     const token = localStorage.getItem('authToken');
     if (typeof url === 'string' && !url.startsWith('http') && token) {
         headers.set('Authorization', `Bearer ${token}`);
     }
-    return nativeFetch(url, { ...options, headers });
+    const res = await nativeFetch(url, { ...options, headers, credentials: 'same-origin' });
+    if (
+        res.status === 401 &&
+        typeof url === 'string' &&
+        !url.startsWith('http') &&
+        !url.startsWith('/auth/')
+    ) {
+        redirectToLogin();
+    }
+    return res;
 };
 
 // --- AUTH ---
-function switchAuthTab(tab) {
-    document.getElementById('auth-tab-login').classList.toggle('active', tab === 'login');
-    document.getElementById('auth-tab-register').classList.toggle('active', tab === 'register');
-    document.getElementById('login-form').classList.toggle('hidden', tab !== 'login');
-    document.getElementById('register-form').classList.toggle('hidden', tab !== 'register');
-    document.getElementById('login-error').classList.add('hidden');
+function redirectToLogin() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('restoranAuth');
+    window.location.replace(LOGIN_URL);
 }
 
-function showAuthError(msg) {
-    const el = document.getElementById('login-error');
-    el.textContent = msg;
-    el.classList.remove('hidden');
-}
-
-function showApp() {
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
+function bootApp() {
+    document.body.classList.remove('auth-pending');
     setupUI();
     loadRestaurants();
     loadStats();
@@ -185,19 +186,9 @@ function showApp() {
 }
 
 async function initApp() {
-    const statusRes = await fetch(`${API}/auth/status`);
-    await statusRes.json();
-
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-        document.getElementById('login-screen').classList.remove('hidden');
-        return;
-    }
-
     const meRes = await fetch(`${API}/auth/me`);
     if (!meRes.ok) {
-        localStorage.removeItem('authToken');
-        document.getElementById('login-screen').classList.remove('hidden');
+        redirectToLogin();
         return;
     }
 
@@ -205,68 +196,17 @@ async function initApp() {
     currentUser = me.user;
     appSettings = { ...appSettings, ...me.settings };
     applySettings();
-    showApp();
+    bootApp();
 }
 
-async function login() {
-    const email = document.getElementById('login-email').value.trim();
-    const password = document.getElementById('login-password').value;
-    const res = await fetch(`${API}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        showAuthError(data.error || 'Giriş başarısız');
-        return;
-    }
-    localStorage.setItem('authToken', data.token);
-    currentUser = data.user;
-    appSettings = { ...appSettings, ...data.settings };
-    applySettings();
-    showApp();
-}
-
-async function register() {
-    const inviteCode = document.getElementById('register-invite').value.trim();
-    if (!inviteCode) {
-        showAuthError('Davet kodu gerekli');
-        return;
-    }
-    const body = {
-        email: document.getElementById('register-email').value.trim(),
-        password: document.getElementById('register-password').value,
-        coupleName1: document.getElementById('register-name1').value.trim(),
-        coupleName2: document.getElementById('register-name2').value.trim(),
-        inviteCode
-    };
-    const res = await fetch(`${API}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        showAuthError(data.error || 'Kayıt başarısız');
-        return;
-    }
-    localStorage.setItem('authToken', data.token);
-    currentUser = data.user;
-    appSettings = { ...appSettings, ...data.settings };
-    applySettings();
-    showApp();
-    showToast('Tekrar hoş geldiniz!', { fun: true });
-}
-
-function logout() {
+async function logout() {
     localStorage.removeItem('authToken');
     localStorage.removeItem('restoranAuth');
-    location.reload();
+    try {
+        await fetch(`${API}/auth/logout`, { method: 'POST' });
+    } catch { /* yönlendirme yine de yapılır */ }
+    window.location.replace(LOGIN_URL);
 }
-
-document.getElementById('login-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-document.getElementById('register-password')?.addEventListener('keydown', e => { if (e.key === 'Enter') register(); });
 
 // --- SETTINGS ---
 async function loadSettings() {
@@ -308,18 +248,10 @@ function applySettings() {
         : coupleName1 ? `${coupleName1}'in Restoranları` : 'Bizim Restoranlarımız';
     const subtitleText = 'Birlikte keşfettiğimiz lezzetler';
 
-    ['app-title', 'login-title'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = titleText;
-    });
-    ['app-subtitle', 'login-subtitle'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.textContent = id === 'login-subtitle' && coupleName1 && coupleName2
-                ? `${coupleName1} & ${coupleName2}'in lezzet günlüğü`
-                : subtitleText;
-        }
-    });
+    const titleEl = document.getElementById('app-title');
+    if (titleEl) titleEl.textContent = titleText;
+    const subtitleEl = document.getElementById('app-subtitle');
+    if (subtitleEl) subtitleEl.textContent = subtitleText;
     updateRatingLabels();
     rotateSubtitle(true);
 }
@@ -1285,13 +1217,20 @@ function setLocationCoords(prefix, lat, lng) {
 }
 
 // --- İSİM ÖNERİLERİ ---
-async function fetchNames(search = '', scope = 'all') {
-    const params = new URLSearchParams();
-    if (search) params.set('search', search);
-    if (scope !== 'all') params.set('scope', scope);
-    const qs = params.toString();
-    const res = await fetch(`${API}/names${qs ? `?${qs}` : ''}`);
-    return res.json();
+function buildNameSuggestions(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const map = new Map();
+    const add = (name, location = '', cuisine = '') => {
+        const trimmed = (name || '').trim();
+        if (!trimmed) return;
+        const key = trimmed.toLowerCase();
+        if (!key.includes(q) && !(location || '').toLowerCase().includes(q)) return;
+        map.set(key, { name: trimmed, cuisine: cuisine || '', location: location || '' });
+    };
+    allWishlist.forEach(w => add(w.name, w.location, w.cuisine));
+    allRestaurants.forEach(r => add(r.name, r.location, r.cuisine));
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
 }
 
 function formatLocationHint(location) {
@@ -1321,7 +1260,7 @@ async function showSuggest(inputId, suggestId) {
         return;
     }
 
-    cachedNames = await fetchNames(query, 'all');
+    cachedNames = buildNameSuggestions(query);
     const target = inputId.includes('edit') ? 'edit' : 'add';
     const exactMatch = cachedNames.some(n => n.name.toLowerCase() === query.toLowerCase());
 
@@ -1367,7 +1306,7 @@ function setupNameAutocomplete(inputId, suggestId) {
 
 async function openNamePicker(target) {
     namePickerTarget = target;
-    cachedNames = await fetchNames('', 'wishlist');
+    await loadWishlist();
     const modal = document.getElementById('name-picker-modal');
     modal.classList.remove('hidden');
     modal.innerHTML = `<div class="modal-box name-picker-box">
@@ -1391,22 +1330,28 @@ function renderNamePickerList(search) {
     const list = document.getElementById('name-picker-list');
     if (!list) return;
     const q = search.trim().toLowerCase();
-    const filtered = q ? cachedNames.filter(n =>
-        n.name.toLowerCase().includes(q) ||
-        (n.location || '').toLowerCase().includes(q)
-    ) : cachedNames;
+    const filtered = allWishlist.filter(w =>
+        !q || w.name.toLowerCase().includes(q) || (w.location || '').toLowerCase().includes(q)
+    );
 
-    list.innerHTML = filtered.length ? filtered.map((n) => {
-        const index = cachedNames.indexOf(n);
-        return `<button type="button" class="name-picker-item" onclick="pickNameFromList(${index})">
-            <span class="name-picker-item-name">${escapeHtml(n.name)}</span>
-            ${n.location ? `<span class="name-picker-item-meta">${escapeHtml(formatLocationHint(n.location))}</span>` : ''}
-        </button>`;
-    }).join('') : '<p class="name-picker-empty">İstek listesi boş — önce İstek sekmesinden mekan ekleyin</p>';
+    list.innerHTML = filtered.length ? filtered.map(w => `
+        <div class="name-picker-row">
+            <button type="button" class="name-picker-item" onclick="pickWishlistEntry('${w.id}')">
+                <span class="name-picker-item-name">${escapeHtml(w.name)}</span>
+                ${w.location ? `<span class="name-picker-item-meta">${escapeHtml(formatLocationHint(w.location))}</span>` : ''}
+            </button>
+            <button type="button" class="name-picker-remove" onclick="deleteWishlistFromPicker('${w.id}')" title="Listeden kaldır" aria-label="Kaldır">×</button>
+        </div>`).join('') : '<p class="name-picker-empty">İstek listesi boş — önce İstek sekmesinden mekan ekleyin</p>';
 }
 
-function pickNameFromList(index) {
-    fillNameFields(namePickerTarget, cachedNames[index]);
+function deleteWishlistFromPicker(id) {
+    deleteWishlistItem(id, { refreshPicker: true });
+}
+
+function pickWishlistEntry(id) {
+    const w = allWishlist.find(item => item.id === id);
+    if (!w) return;
+    fillNameFields(namePickerTarget, { name: w.name, location: w.location || '', cuisine: w.cuisine || '' });
     closeModal('name-picker-modal');
 }
 
@@ -1752,11 +1697,19 @@ async function visitFromWishlist(id) {
     }
 }
 
-async function deleteWishlistItem(id) {
+async function deleteWishlistItem(id, { refreshPicker = false } = {}) {
     if (!confirm('İstek listesinden silinsin mi?')) return;
     await fetch(`${API}/wishlist/${id}`, { method: 'DELETE' });
-    loadWishlist();
+    await loadWishlist();
     loadStats();
+    if (refreshPicker || isNamePickerOpen()) {
+        renderNamePickerList(document.getElementById('name-picker-search')?.value || '');
+    }
+}
+
+function isNamePickerOpen() {
+    const modal = document.getElementById('name-picker-modal');
+    return modal && !modal.classList.contains('hidden');
 }
 
 // --- ROULETTE ---

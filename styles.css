@@ -632,6 +632,8 @@ body {
 
 /* ===== LOGIN ===== */
 .login-screen { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1.5rem; background: var(--bg-gradient, var(--bg)); }
+.login-page { min-height: 100dvh; }
+body.auth-pending { visibility: hidden; }
 .login-card { width: 100%; max-width: 22rem; padding: 2rem 1.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 16px 48px var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent); }
 .login-kicker { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-muted); margin: 0 0 0.5rem; }
 .login-title { font-size: 2.15rem; line-height: 1.08; margin: 0 0 0.5rem; color: var(--text); }
@@ -1008,12 +1010,19 @@ body {
     border-radius: var(--radius);
     background: var(--surface-2);
 }
+.name-picker-row {
+    display: flex;
+    align-items: stretch;
+    border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+.name-picker-row:first-child { border-top: none; }
 .name-picker-item {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 0.12rem;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 0.7rem 0.9rem;
     border: none;
     border-radius: 0;
@@ -1024,10 +1033,27 @@ body {
     cursor: pointer;
     transition: background 0.12s;
 }
-.name-picker-item + .name-picker-item { border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent); }
-.name-picker-item:hover,
+.name-picker-row:hover .name-picker-item,
 .name-picker-item:focus-visible {
     background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    outline: none;
+}
+.name-picker-remove {
+    flex-shrink: 0;
+    width: 2.5rem;
+    border: none;
+    border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+    background: transparent;
+    color: var(--text-soft);
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+}
+.name-picker-remove:hover,
+.name-picker-remove:focus-visible {
+    background: color-mix(in srgb, var(--danger, #c0392b) 12%, var(--surface));
+    color: var(--danger, #c0392b);
     outline: none;
 }
 .name-picker-item-name { font-size: 0.9rem; font-weight: 600; }

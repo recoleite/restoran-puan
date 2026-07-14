@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="rose">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giriş — Bizim Restoranlarımız</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=1.3.0" />
+</head>
+<body class="login-page">
+    <div class="login-screen">
+        <div class="login-card">
+            <p class="login-kicker">Lezzet günlüğü</p>
+            <h1 id="login-title" class="font-display login-title">Bizim Restoranlarımız</h1>
+            <p id="login-subtitle" class="font-script login-subtitle">Birlikte keşfettiğiniz mekânları kaydedin</p>
+            <div class="auth-tabs">
+                <button type="button" id="auth-tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Giriş</button>
+                <button type="button" id="auth-tab-register" class="auth-tab" onclick="switchAuthTab('register')">Kayıt Ol</button>
+            </div>
+            <div id="login-form" class="auth-form">
+                <input type="email" id="login-email" placeholder="E-posta" class="input" autocomplete="email">
+                <input type="password" id="login-password" placeholder="Şifre" class="input" autocomplete="current-password">
+                <button type="button" onclick="login()" class="btn-primary w-full">Giriş Yap</button>
+            </div>
+            <div id="register-form" class="auth-form hidden">
+                <input type="email" id="register-email" placeholder="E-posta" class="input" autocomplete="email">
+                <input type="password" id="register-password" placeholder="Şifre (min. 6)" class="input" autocomplete="new-password">
+                <div class="input-row">
+                    <input type="text" id="register-name1" placeholder="Senin adın" class="input">
+                    <input type="text" id="register-name2" placeholder="Partner adı" class="input">
+                </div>
+                <input type="text" id="register-invite" placeholder="Davet kodu" class="input" required>
+                <button type="button" onclick="register()" class="btn-primary w-full">Hesap Oluştur</button>
+            </div>
+            <p id="login-error" class="form-error hidden"></p>
+        </div>
+    </div>
+    <script src="auth.js?v=1.3.0"></script>
+</body>
+</html>

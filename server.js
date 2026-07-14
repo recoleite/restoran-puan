@@ -7,16 +7,77 @@ const photoStore = require('./photoStore');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const AUTH_COOKIE = 'authToken';
+const AUTH_MAX_AGE = 60 * 60 * 24 * 30;
+const APP_PAGE = path.join(__dirname, 'app.html');
+const LOGIN_PAGE = path.join(__dirname, 'login.html');
 
+app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
-app.get(['/', '/index.html'], (req, res) => {
+function readAuthToken(req) {
+    const header = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    if (header) return header;
+    const raw = req.headers.cookie || '';
+    const match = raw.match(new RegExp(`(?:^|;\\s*)${AUTH_COOKIE}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : '';
+}
+
+function setAuthCookie(res, token, req) {
+    const secure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    const parts = [
+        `${AUTH_COOKIE}=${encodeURIComponent(token)}`,
+        'Path=/',
+        'HttpOnly',
+        'SameSite=Lax',
+        `Max-Age=${AUTH_MAX_AGE}`
+    ];
+    if (secure) parts.push('Secure');
+    res.setHeader('Set-Cookie', parts.join('; '));
+}
+
+function clearAuthCookie(res) {
+    res.setHeader('Set-Cookie', `${AUTH_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function requireAuthPage(req, res, next) {
+    if (!userStore.verifyToken(readAuthToken(req))) {
+        return res.redirect('/login.html');
+    }
+    next();
+}
+
+function sendAppPage(req, res) {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(APP_PAGE);
+}
+
+function sendLoginPage(req, res) {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.sendFile(LOGIN_PAGE);
+}
+
+app.get(['/app', '/app.html'], requireAuthPage, sendAppPage);
+app.get(['/login', '/login.html'], sendLoginPage);
+app.get('/', (req, res) => {
+    if (userStore.verifyToken(readAuthToken(req))) return res.redirect('/app');
+    res.redirect('/login.html');
+});
+app.get('/index.html', (req, res) => {
+    if (userStore.verifyToken(readAuthToken(req))) return res.redirect('/app');
+    res.redirect('/login.html');
 });
 
-app.use(express.static(__dirname));
+app.use((req, res, next) => {
+    const blocked = ['/data', '/node_modules', '/scripts', '/app.html', '/server.js', '/userStore.js', '/photoStore.js'];
+    if (blocked.some(prefix => req.path === prefix || req.path.startsWith(`${prefix}/`))) {
+        return res.status(404).end();
+    }
+    next();
+});
+
+app.use(express.static(__dirname, { index: false }));
 
 const DEFAULT_CATEGORIES = () => ({
     food: { my: 3, partner: 3 },
@@ -97,21 +158,32 @@ function applyCoverPhoto(restaurant, coverPhoto) {
 
 const findRestaurant = (userDb, id) => userDb.restaurants.findIndex(r => r.id === id);
 
-const upsertNameRegistry = (userDb, name, cuisine = '', location = '') => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const existing = userDb.nameRegistry.findIndex(n => n.name.toLowerCase() === trimmed.toLowerCase());
-    if (existing !== -1) {
-        userDb.nameRegistry[existing] = {
+function buildNameList(userDb, scope = 'all') {
+    const map = new Map();
+    const add = (name, cuisine = '', location = '') => {
+        const trimmed = (name || '').trim();
+        if (!trimmed) return;
+        const key = trimmed.toLowerCase();
+        map.set(key, {
             name: trimmed,
-            cuisine: cuisine.trim() || userDb.nameRegistry[existing].cuisine,
-            location: location.trim() || userDb.nameRegistry[existing].location
-        };
-    } else {
-        userDb.nameRegistry.push({ name: trimmed, cuisine: cuisine.trim(), location: location.trim() });
+            cuisine: (cuisine || '').trim(),
+            location: (location || '').trim()
+        });
+    };
+
+    if (scope === 'all' || scope === 'wishlist') {
+        for (const w of userDb.wishlist || []) add(w.name, w.cuisine, w.location);
     }
-    userDb.nameRegistry.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-};
+    if (scope === 'all' || scope === 'restaurants') {
+        for (const r of userDb.restaurants || []) add(r.name, r.cuisine, r.location);
+    }
+
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+}
+
+function syncNameRegistry(userDb) {
+    userDb.nameRegistry = buildNameList(userDb, 'all');
+}
 
 const syncRestaurantFromVisits = (restaurant) => {
     if (!restaurant.visits?.length) return restaurant;
@@ -161,10 +233,15 @@ userStore.migrateLegacyDataIfNeeded(migrateRestaurant);
 function attachUserDb(req) {
     req.db = userStore.loadUserDb(req.userId);
     req.db.restaurants = (req.db.restaurants || []).map(migrateRestaurant);
+    const before = JSON.stringify(req.db.nameRegistry || []);
+    syncNameRegistry(req.db);
+    if (JSON.stringify(req.db.nameRegistry) !== before) {
+        userStore.saveUserDb(req.userId, req.db);
+    }
 }
 
 function requireAuth(req, res, next) {
-    const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    const token = readAuthToken(req);
     const payload = userStore.verifyToken(token);
     if (!payload) return res.status(401).json({ error: 'Giriş gerekli' });
     req.userId = payload.userId;
@@ -206,6 +283,7 @@ app.post('/auth/register', (req, res) => {
         const user = userStore.createUser({ email, password, displayName, coupleName1, coupleName2 });
         const token = userStore.signToken(user.id);
         const db = userStore.loadUserDb(user.id);
+        setAuthCookie(res, token, req);
         res.status(201).json({
             token,
             user: userStore.sanitizeUser(user),
@@ -224,11 +302,17 @@ app.post('/auth/login', (req, res) => {
     }
     const token = userStore.signToken(user.id);
     const db = userStore.loadUserDb(user.id);
+    setAuthCookie(res, token, req);
     res.json({
         token,
         user: userStore.sanitizeUser(user),
         settings: db.settings
     });
+});
+
+app.post('/auth/logout', (req, res) => {
+    clearAuthCookie(res);
+    res.json({ ok: true });
 });
 
 app.get('/auth/me', requireAuth, (req, res) => {
@@ -546,7 +630,7 @@ app.get('/backup/export', (req, res) => {
         version: 1,
         restaurants: req.db.restaurants,
         wishlist: req.db.wishlist,
-        nameRegistry: req.db.nameRegistry,
+        nameRegistry: buildNameList(req.db, 'all'),
         settings: req.db.settings
     });
 });
@@ -559,7 +643,7 @@ app.post('/backup/import', (req, res) => {
 
     req.db.restaurants = data.restaurants.map(migrateRestaurant);
     req.db.wishlist = Array.isArray(data.wishlist) ? data.wishlist : [];
-    req.db.nameRegistry = Array.isArray(data.nameRegistry) ? data.nameRegistry : [];
+    syncNameRegistry(req.db);
 
     if (data.settings && typeof data.settings === 'object') {
         req.db.settings = {
@@ -596,7 +680,7 @@ app.post('/wishlist', (req, res) => {
         addedAt: new Date().toISOString()
     };
     req.db.wishlist.unshift(item);
-    upsertNameRegistry(req.db, item.name, item.cuisine, item.location);
+    syncNameRegistry(req.db);
     persist(req);
     res.status(201).json(item);
 });
@@ -614,6 +698,7 @@ app.patch('/wishlist/:id', (req, res) => {
         ...(fields.lat !== undefined && { lat: fields.lat }),
         ...(fields.lng !== undefined && { lng: fields.lng })
     };
+    syncNameRegistry(req.db);
     persist(req);
     res.json(req.db.wishlist[index]);
 });
@@ -622,6 +707,7 @@ app.delete('/wishlist/:id', (req, res) => {
     const index = req.db.wishlist.findIndex(w => w.id === req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Kayıt bulunamadı' });
     req.db.wishlist.splice(index, 1);
+    syncNameRegistry(req.db);
     persist(req);
     res.json({ success: true });
 });
@@ -661,6 +747,7 @@ app.post('/wishlist/:id/visit', (req, res) => {
     };
     req.db.restaurants.unshift(newRestaurant);
     req.db.wishlist.splice(index, 1);
+    syncNameRegistry(req.db);
     persist(req);
     res.status(201).json(newRestaurant);
 });
@@ -689,7 +776,8 @@ app.get('/timeline', (req, res) => {
 // --- İSİM KAYITLARI ---
 app.get('/names', (req, res) => {
     const search = (req.query.search || '').trim().toLowerCase();
-    let names = req.db.nameRegistry;
+    const scope = ['all', 'wishlist', 'restaurants'].includes(req.query.scope) ? req.query.scope : 'all';
+    let names = buildNameList(req.db, scope);
     if (search) {
         names = names.filter(n =>
             n.name.toLowerCase().includes(search) ||
@@ -777,7 +865,7 @@ app.post('/restaurants', async (req, res) => {
         }
 
         req.db.restaurants.unshift(newRestaurant);
-        upsertNameRegistry(req.db, newRestaurant.name, newRestaurant.cuisine, newRestaurant.location);
+        syncNameRegistry(req.db);
         persist(req);
         res.status(201).json(newRestaurant);
     } catch (err) {
@@ -814,10 +902,9 @@ app.patch('/restaurants/:id', (req, res) => {
     };
 
     syncRestaurantFromVisits(req.db.restaurants[index]);
-    const updated = req.db.restaurants[index];
-    upsertNameRegistry(req.db, updated.name, updated.cuisine, updated.location);
+    syncNameRegistry(req.db);
     persist(req);
-    res.json(updated);
+    res.json(req.db.restaurants[index]);
 });
 
 app.post('/restaurants/:id/favorite', (req, res) => {
@@ -922,6 +1009,7 @@ app.delete('/restaurants/:id', (req, res) => {
     const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
     req.db.restaurants.splice(index, 1);
+    syncNameRegistry(req.db);
     persist(req);
     res.json({ success: true });
 });
