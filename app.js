@@ -1285,8 +1285,12 @@ function setLocationCoords(prefix, lat, lng) {
 }
 
 // --- İSİM ÖNERİLERİ ---
-async function fetchNames(search = '') {
-    const res = await fetch(`${API}/names?search=${encodeURIComponent(search)}`);
+async function fetchNames(search = '', scope = 'all') {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (scope !== 'all') params.set('scope', scope);
+    const qs = params.toString();
+    const res = await fetch(`${API}/names${qs ? `?${qs}` : ''}`);
     return res.json();
 }
 
@@ -1317,7 +1321,7 @@ async function showSuggest(inputId, suggestId) {
         return;
     }
 
-    cachedNames = await fetchNames(query);
+    cachedNames = await fetchNames(query, 'all');
     const target = inputId.includes('edit') ? 'edit' : 'add';
     const exactMatch = cachedNames.some(n => n.name.toLowerCase() === query.toLowerCase());
 
@@ -1363,14 +1367,14 @@ function setupNameAutocomplete(inputId, suggestId) {
 
 async function openNamePicker(target) {
     namePickerTarget = target;
-    cachedNames = await fetchNames('');
+    cachedNames = await fetchNames('', 'wishlist');
     const modal = document.getElementById('name-picker-modal');
     modal.classList.remove('hidden');
     modal.innerHTML = `<div class="modal-box name-picker-box">
         <div class="flex justify-between mb-3">
             <div>
-                <h2 class="font-display font-semibold theme-text">Kayıtlı mekanlar</h2>
-                <p class="name-picker-hint">Daha önce kullandığınız isimler — dokunarak doldurun</p>
+                <h2 class="font-display font-semibold theme-text">İstek listesi</h2>
+                <p class="name-picker-hint">Gitmek istediğiniz mekanlar — silinen veya gittiğiniz kayıtlar burada görünmez</p>
             </div>
             <button type="button" onclick="closeModal('name-picker-modal')" class="modal-close" aria-label="Kapat">×</button>
         </div>
@@ -1398,7 +1402,7 @@ function renderNamePickerList(search) {
             <span class="name-picker-item-name">${escapeHtml(n.name)}</span>
             ${n.location ? `<span class="name-picker-item-meta">${escapeHtml(formatLocationHint(n.location))}</span>` : ''}
         </button>`;
-    }).join('') : '<p class="name-picker-empty">Kayıt bulunamadı</p>';
+    }).join('') : '<p class="name-picker-empty">İstek listesi boş — önce İstek sekmesinden mekan ekleyin</p>';
 }
 
 function pickNameFromList(index) {
