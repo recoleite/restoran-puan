@@ -160,15 +160,22 @@ async function loadSettings() {
 }
 
 const APP_THEMES = [
-    { id: 'rose', label: 'Gül', swatch: 'theme-swatch-rose' },
-    { id: 'cherry', label: 'Kiraz', swatch: 'theme-swatch-cherry' },
-    { id: 'sunset', label: 'Gün batımı', swatch: 'theme-swatch-sunset' },
-    { id: 'cream', label: 'Krem', swatch: 'theme-swatch-cream' },
-    { id: 'lavender', label: 'Lila', swatch: 'theme-swatch-lavender' },
-    { id: 'ocean', label: 'Turkuaz', swatch: 'theme-swatch-ocean' },
-    { id: 'sky', label: 'Gökyüzü', swatch: 'theme-swatch-sky' },
-    { id: 'forest', label: 'Orman', swatch: 'theme-swatch-forest' },
-    { id: 'dark', label: 'Gece', swatch: 'theme-swatch-dark' }
+    { id: 'rose', label: 'Gül', swatch: 'theme-swatch-rose', group: 'light' },
+    { id: 'cherry', label: 'Kiraz', swatch: 'theme-swatch-cherry', group: 'light' },
+    { id: 'sunset', label: 'Gün batımı', swatch: 'theme-swatch-sunset', group: 'light' },
+    { id: 'cream', label: 'Krem', swatch: 'theme-swatch-cream', group: 'light' },
+    { id: 'lavender', label: 'Lila', swatch: 'theme-swatch-lavender', group: 'light' },
+    { id: 'ocean', label: 'Turkuaz', swatch: 'theme-swatch-ocean', group: 'light' },
+    { id: 'sky', label: 'Gökyüzü', swatch: 'theme-swatch-sky', group: 'light' },
+    { id: 'forest', label: 'Orman', swatch: 'theme-swatch-forest', group: 'light' },
+    { id: 'dark', label: 'Gül koyu', swatch: 'theme-swatch-dark', group: 'dark' },
+    { id: 'cherry-dark', label: 'Kiraz koyu', swatch: 'theme-swatch-cherry-dark', group: 'dark' },
+    { id: 'sunset-dark', label: 'Gün batımı koyu', swatch: 'theme-swatch-sunset-dark', group: 'dark' },
+    { id: 'cream-dark', label: 'Krem koyu', swatch: 'theme-swatch-cream-dark', group: 'dark' },
+    { id: 'lavender-dark', label: 'Lila koyu', swatch: 'theme-swatch-lavender-dark', group: 'dark' },
+    { id: 'ocean-dark', label: 'Turkuaz koyu', swatch: 'theme-swatch-ocean-dark', group: 'dark' },
+    { id: 'sky-dark', label: 'Gökyüzü koyu', swatch: 'theme-swatch-sky-dark', group: 'dark' },
+    { id: 'forest-dark', label: 'Orman koyu', swatch: 'theme-swatch-forest-dark', group: 'dark' }
 ];
 const ALLOWED_THEMES = APP_THEMES.map(t => t.id);
 
@@ -225,11 +232,19 @@ function openSettingsModal() {
             <div><label class="label">Sevgilinin Adı</label>
             <input type="text" id="settings-name2" class="input" value="${escapeHtml(appSettings.coupleName2)}" placeholder="Mehmet"></div>
             <div><label class="label">Tema</label>
-            <div class="theme-picker">${themes.map(t => `
-                <button type="button" class="theme-option ${selectedTheme === t.id ? 'active' : ''}" data-theme="${t.id}" onclick="pickTheme('${t.id}')">
-                    <div class="theme-swatch ${t.swatch}"></div>${t.label}
-                </button>`).join('')}
-            </div></div>
+            ${['light', 'dark'].map(group => {
+                const label = group === 'light' ? 'Açık temalar' : 'Koyu temalar';
+                const items = themes.filter(t => t.group === group);
+                return `<div class="theme-section">
+                    <p class="theme-section-label">${label}</p>
+                    <div class="theme-picker">${items.map(t => `
+                        <button type="button" class="theme-option ${selectedTheme === t.id ? 'active' : ''}" data-theme="${t.id}" onclick="pickTheme('${t.id}')">
+                            <div class="theme-swatch ${t.swatch}"></div>${t.label}
+                        </button>`).join('')}
+                    </div>
+                </div>`;
+            }).join('')}
+            </div>
             <div class="settings-divider"></div>
             <div>
                 <p class="settings-section-title">Yedekleme</p>
@@ -320,7 +335,14 @@ const SHARE_CARD_THEMES = {
     lavender: { bg: ['#faf5ff', '#e9d5ff'], primary: '#8b5cf6', light: '#f5f3ff', text: '#1f2937', muted: '#6b7280' },
     ocean: { bg: ['#f0fdfa', '#99f6e4'], primary: '#0d9488', light: '#ccfbf1', text: '#134e4a', muted: '#0f766e' },
     sky: { bg: ['#eff6ff', '#93c5fd'], primary: '#2563eb', light: '#dbeafe', text: '#1e3a8a', muted: '#1d4ed8' },
-    forest: { bg: ['#f0fdf4', '#86efac'], primary: '#059669', light: '#dcfce7', text: '#14532d', muted: '#15803d' }
+    forest: { bg: ['#f0fdf4', '#86efac'], primary: '#059669', light: '#dcfce7', text: '#14532d', muted: '#15803d' },
+    'cherry-dark': { bg: ['#140810', '#2a1024'], primary: '#f472b6', light: '#2a1830', text: '#fdf2f8', muted: '#f9a8d4' },
+    'sunset-dark': { bg: ['#140808', '#2a1410'], primary: '#fb7185', light: '#2a1814', text: '#fff7ed', muted: '#fdba74' },
+    'cream-dark': { bg: ['#120e08', '#282010'], primary: '#f97316', light: '#2a2014', text: '#fffbeb', muted: '#fcd34d' },
+    'lavender-dark': { bg: ['#0e0818', '#1e1030'], primary: '#a78bfa', light: '#241838', text: '#f5f3ff', muted: '#c4b5fd' },
+    'ocean-dark': { bg: ['#061412', '#102820'], primary: '#2dd4bf', light: '#142a26', text: '#f0fdfa', muted: '#5eead4' },
+    'sky-dark': { bg: ['#080e18', '#101828'], primary: '#60a5fa', light: '#142038', text: '#eff6ff', muted: '#93c5fd' },
+    'forest-dark': { bg: ['#061410', '#102818'], primary: '#34d399', light: '#142a20', text: '#ecfdf5', muted: '#6ee7b7' }
 };
 
 function getCoupleTitle() {

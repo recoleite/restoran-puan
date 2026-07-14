@@ -47,7 +47,10 @@ const migrateRestaurant = (r) => {
     };
 };
 
-const ALLOWED_THEMES = ['rose', 'cherry', 'sunset', 'dark', 'cream', 'lavender', 'ocean', 'sky', 'forest'];
+const ALLOWED_THEMES = [
+    'rose', 'cherry', 'sunset', 'cream', 'lavender', 'ocean', 'sky', 'forest',
+    'dark', 'cherry-dark', 'sunset-dark', 'cream-dark', 'lavender-dark', 'ocean-dark', 'sky-dark', 'forest-dark'
+];
 const clampRating = (val) => Math.min(5, Math.max(1, Math.round(Number(val) || 1)));
 
 function getRestaurantPhotos(r) {
