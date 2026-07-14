@@ -28,6 +28,133 @@ const photoGalleries = {};
 let lightboxPhotos = [];
 let lightboxIndex = 0;
 let currentUser = null;
+let subtitleTimer = null;
+
+const FUN_TOASTS = {
+    add: [
+        'Yeni lezzet durağı kaydedildi!',
+        'Listeye bir mekân daha eklendi.',
+        'Damak hafızası güncellendi.',
+        'Bir sonraki anı için hazır.'
+    ],
+    first: [
+        'İlk restoran! Macera resmen başladı.',
+        'Lezzet günlüğünün ilk sayfası açıldı.'
+    ],
+    milestone: [
+        '{n} restoran — artık seçenek bolluğu var!',
+        '{n} mekân! Gurme çift modu aktif.'
+    ],
+    perfect: [
+        '5 yıldız! Bu mekân altın listede.',
+        'Mükemmel puan — tekrar gidilir.',
+        'İkiniz de bayıldınız demek ki.'
+    ],
+    favorite: [
+        'Favorilere eklendi.',
+        'Kalbe kaydedildi.',
+        'Bu mekân artık özel listede.'
+    ],
+    visit: [
+        'Yeni anı eklendi!',
+        'Bir ziyaret daha, bir hikâye daha.',
+        'Günlüğe bir sayfa daha.'
+    ],
+    roulette: [
+        'Kader konuştu — bugün burası!',
+        'Çark karar verdi, şapkayı takın.',
+        'Bu akşamın adresi belli oldu.'
+    ]
+};
+
+const FUN_SUBTITLES = [
+    'Birlikte keşfettiğimiz lezzetler',
+    'Kararsız mı kaldınız? Çarkı çevirin',
+    'Her ziyaret küçük bir anı',
+    'Favoriler kalpte, gerisi listede',
+    'Bugün nereye açız?'
+];
+
+function pickOne(list) {
+    return list[Math.floor(Math.random() * list.length)];
+}
+
+function funMessage(category, vars = {}) {
+    let pool = FUN_TOASTS[category] || FUN_TOASTS.add;
+    let msg = pickOne(pool);
+    Object.entries(vars).forEach(([key, val]) => {
+        msg = msg.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+    });
+    return msg;
+}
+
+function burstConfetti({ count = 24, x, y } = {}) {
+    const root = document.getElementById('confetti-root');
+    if (!root) return;
+    const colors = ['var(--accent)', 'var(--accent-2)', 'var(--gold)', '#fbbf24', '#fb7185', '#a78bfa'];
+    const originX = x ?? window.innerWidth / 2;
+    const originY = y ?? window.innerHeight * 0.38;
+    for (let i = 0; i < count; i++) {
+        const piece = document.createElement('span');
+        piece.className = 'confetti-piece';
+        piece.style.left = `${originX}px`;
+        piece.style.top = `${originY}px`;
+        piece.style.background = colors[i % colors.length];
+        piece.style.setProperty('--dx', `${(Math.random() - 0.5) * 300}px`);
+        piece.style.setProperty('--dy', `${Math.random() * -340 - 60}px`);
+        piece.style.setProperty('--rot', `${Math.random() * 720 - 360}deg`);
+        piece.style.animationDelay = `${Math.random() * 0.12}s`;
+        root.appendChild(piece);
+        piece.addEventListener('animationend', () => piece.remove());
+    }
+}
+
+function flashToast(msg, { confetti = false, fun = false } = {}) {
+    sessionStorage.setItem('toast', JSON.stringify({ msg, confetti, fun }));
+}
+
+function getFunBanner(s) {
+    const n = s.restaurantCount || 0;
+    if (n === 1) return 'İlk restoran kaydedildi — macera başladı!';
+    if (n === 5) return '5 mekân! Artık çark için güzel bir havuz var.';
+    if (n === 10) return '10 restoran — resmen lezzet arşivi oldunuz.';
+    if (n === 25) return '25 mekân… Bu artık bir gastronomi atlası.';
+    if (s.favoriteCount >= 3 && s.avgRating >= 4.5) return 'Favoriler sağlam, damak tadınız uyumlu görünüyor.';
+    if (s.monthVisits >= 3) return `Bu ay ${s.monthVisits} ziyaret — oldukça aktif bir çift!`;
+    if (s.topRated?.rating >= 5) return `${s.topRated.name} 5★ — taç mekânınız belli.`;
+    return pickOne([
+        'Her kart bir anı, her anı bir hikâye.',
+        'Paylaş sekmesinden özet kartı oluşturabilirsiniz.',
+        'İstek listesinden hayal mekânlarını ekleyin.'
+    ]);
+}
+
+function buildSubtitleLines() {
+    const { coupleName1, coupleName2 } = appSettings;
+    const lines = [...FUN_SUBTITLES];
+    if (coupleName1 && coupleName2) {
+        lines.unshift(`${coupleName1} & ${coupleName2}'nin lezzet haritası`);
+    }
+    return lines;
+}
+
+function rotateSubtitle(reset = false) {
+    const el = document.getElementById('app-subtitle');
+    if (!el) return;
+    const lines = buildSubtitleLines();
+    let idx = reset ? 0 : Math.floor(Math.random() * lines.length);
+    clearInterval(subtitleTimer);
+    el.textContent = lines[idx];
+    el.style.transition = 'opacity 0.35s ease';
+    subtitleTimer = setInterval(() => {
+        el.classList.add('subtitle-fade');
+        setTimeout(() => {
+            idx = (idx + 1) % lines.length;
+            el.textContent = lines[idx];
+            el.classList.remove('subtitle-fade');
+        }, 350);
+    }, 9000);
+}
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
@@ -64,7 +191,12 @@ function showApp() {
     const flash = sessionStorage.getItem('toast');
     if (flash) {
         sessionStorage.removeItem('toast');
-        showToast(flash);
+        try {
+            const data = JSON.parse(flash);
+            showToast(data.msg, { confetti: data.confetti, fun: data.fun });
+        } catch {
+            showToast(flash);
+        }
     }
 }
 
@@ -140,7 +272,7 @@ async function register() {
     appSettings = { ...appSettings, ...data.settings };
     applySettings();
     showApp();
-    showToast('Hoş geldin! 🎉');
+    showToast('Tekrar hoş geldiniz!', { fun: true });
 }
 
 function logout() {
@@ -205,6 +337,7 @@ function applySettings() {
         }
     });
     updateRatingLabels();
+    rotateSubtitle(true);
 }
 
 let selectedTheme = 'rose';
@@ -801,9 +934,28 @@ function buildStarPicker(containerId, hiddenId, initial = 3) {
 
 function setStar(containerId, hiddenId, val) {
     document.getElementById(hiddenId).value = val;
-    document.getElementById(containerId).querySelectorAll('.star-btn').forEach((s, i) => {
+    const container = document.getElementById(containerId);
+    container.querySelectorAll('.star-btn').forEach((s, i) => {
         s.className = `star-btn ${i < val ? 'text-amber-400' : 'text-gray-200'}`;
     });
+    if (val === 5) {
+        container.classList.add('stars-max');
+        setTimeout(() => container.classList.remove('stars-max'), 500);
+    }
+}
+
+function showToast(msg, opts = {}) {
+    const toast = document.getElementById('toast');
+    const msgEl = document.getElementById('toast-msg');
+    toast.classList.toggle('toast-fun', !!opts.fun);
+    if (msgEl) msgEl.textContent = msg;
+    else toast.textContent = msg;
+    toast.classList.add('show');
+    if (opts.confetti) burstConfetti({ count: opts.confettiCount || 28 });
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.remove('toast-fun');
+    }, 2800);
 }
 
 function formatDateParts(d) {
@@ -813,15 +965,6 @@ function formatDateParts(d) {
         day: date.getDate(),
         month: date.toLocaleDateString('tr-TR', { month: 'short' }).replace('.', '')
     };
-}
-
-function showToast(msg) {
-    const toast = document.getElementById('toast');
-    const msgEl = document.getElementById('toast-msg');
-    if (msgEl) msgEl.textContent = msg;
-    else toast.textContent = msg;
-    toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2500);
 }
 
 function readFilesAsBase64(files) {
@@ -985,8 +1128,9 @@ document.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') lightboxNav(1, { stopPropagation() {} });
 });
 
-function renderEmptyState(title, desc, actionHtml = '') {
+function renderEmptyState(title, desc, actionHtml = '', icon = '') {
     return `<div class="empty-state">
+        ${icon ? `<span class="empty-state-icon" aria-hidden="true">${icon}</span>` : ''}
         <h3>${title}</h3>
         <p>${desc}</p>
         ${actionHtml ? `<div class="mt-4">${actionHtml}</div>` : ''}
@@ -1246,6 +1390,7 @@ function renderDashboard(s) {
     if (s.topCuisine) highlights.push({ label: 'Favori mutfak', value: `${escapeHtml(s.topCuisine.name)} · ${s.topCuisine.count}×` });
 
     el.innerHTML = `
+        <p class="dash-fun-banner">${escapeHtml(getFunBanner(s))}</p>
         <div class="dash-summary">
             <div class="dash-stat"><span class="dash-stat-value">${s.restaurantCount}</span><span class="dash-stat-label">Restoran</span></div>
             <div class="dash-stat"><span class="dash-stat-value">${s.visitCount}</span><span class="dash-stat-label">Ziyaret</span></div>
@@ -1383,11 +1528,12 @@ function renderRestaurantCard(r, index) {
 
     if (cover) {
         return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
-            <div class="card-cover">
+            <div class="card-cover${perfect ? ' has-perfect' : ''}">
                 <img src="${cover}" class="card-cover-img" alt="">
                 <div class="card-cover-overlay"></div>
                 <div class="card-cover-info"><h3>${escapeHtml(r.name)}</h3></div>
                 <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover${favClass}" aria-label="Favori">♥</button>
+                ${perfect ? '<span class="perfect-badge">Mükemmel</span>' : ''}
                 ${photoCount > 1 ? `<span class="cover-photo-badge">${photoCount} foto</span>` : ''}
                 <div class="cover-rating-badge"><span class="score">${avg}</span><span class="stars">${renderStars(Math.round(avg))}</span></div>
             </div>
@@ -1397,6 +1543,7 @@ function renderRestaurantCard(r, index) {
     return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
         <div class="card-placeholder">
             <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn${favClass}" aria-label="Favori">♥</button>
+            ${perfect ? '<span class="perfect-badge">Mükemmel</span>' : ''}
             <span class="card-monogram">${initial}</span>
             <span class="name">${escapeHtml(r.name)}</span>
             <span class="rating-inline">${avg} · ${renderStars(Math.round(avg))}</span>
@@ -1417,7 +1564,7 @@ function renderList(restaurants) {
     const list = document.getElementById('restaurant-list');
 
     if (!restaurants.length) {
-        list.innerHTML = renderEmptyState('Henüz restoran yok', 'İlk restoranınızı ekleyerek başlayın.', '<button onclick="fabAddRestaurant()" class="btn-primary">Restoran ekle</button>');
+        list.innerHTML = renderEmptyState('Henüz restoran yok', 'İlk mekânınızı ekleyin — macera buradan başlar.', '<button onclick="fabAddRestaurant()" class="btn-primary">Restoran ekle</button>', '✦');
         return;
     }
     list.innerHTML = restaurants.map((r, i) => renderRestaurantCard(r, i)).join('');
@@ -1433,7 +1580,7 @@ async function loadTimeline() {
 function renderTimeline(events) {
     const list = document.getElementById('timeline-list');
     if (!events.length) {
-        list.innerHTML = renderEmptyState('Henüz anı yok', 'Restoran ekleyip ziyaret kaydı oluşturun.');
+        list.innerHTML = renderEmptyState('Henüz anı yok', 'Ziyaret ekleyince burada görünür.', '', '◷');
         return;
     }
     list.innerHTML = events.map(e => {
@@ -1664,6 +1811,7 @@ function spinRoulette(fromWishlist = false) {
             <p class="roulette-result-name">${escapeHtml(pick.name)}</p>
             ${pick.location ? `<p class="roulette-result-sub">${escapeHtml(pick.location)}</p>` : ''}
             ${rating}`;
+        showToast(funMessage('roulette'), { fun: true, confetti: true, confettiCount: 20 });
         rouletteSpinning = false;
         if (btn) btn.disabled = false;
     }, 3000);
@@ -1693,13 +1841,15 @@ document.addEventListener('click', e => {
 
 // --- FAVORİ ---
 async function toggleFavorite(id) {
-    await fetch(`${API}/restaurants/${id}/favorite`, { method: 'POST' });
     const btn = document.querySelector(`#card-${id} .fav-btn`);
+    const wasFav = btn?.classList.contains('active');
+    await fetch(`${API}/restaurants/${id}/favorite`, { method: 'POST' });
     if (btn) {
         btn.classList.toggle('active');
         btn.classList.add('pop');
         setTimeout(() => btn.classList.remove('pop'), 500);
     }
+    if (!wasFav) showToast(funMessage('favorite'), { fun: true });
     loadRestaurants();
     loadStats();
 }
@@ -1757,8 +1907,9 @@ async function submitVisit(e) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     });
     closeModal('visit-modal');
-    showToast('Ziyaret eklendi!');
+    showToast(funMessage('visit'), { fun: true, confetti: true, confettiCount: 16 });
     loadRestaurants();
+    loadStats();
 }
 
 // --- GEÇMİŞ ---
@@ -1921,7 +2072,21 @@ async function submitAdd(e) {
     };
     const res = await fetch(`${API}/restaurants`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (res.ok) {
-        sessionStorage.setItem('toast', 'Restoran eklendi!');
+        const count = allRestaurants.length + 1;
+        const score = parseFloat(avgRating(body.myRating, body.partnerRating));
+        let msg = funMessage('add');
+        let confetti = false;
+        if (count === 1) {
+            msg = funMessage('first');
+            confetti = true;
+        } else if (count === 5 || count === 10 || count === 25) {
+            msg = funMessage('milestone', { n: count });
+            confetti = true;
+        } else if (score >= 5) {
+            msg = funMessage('perfect');
+            confetti = true;
+        }
+        flashToast(msg, { confetti, fun: true });
         location.reload();
         return;
     }
