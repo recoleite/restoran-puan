@@ -47,6 +47,7 @@ const migrateRestaurant = (r) => {
     };
 };
 
+const ALLOWED_THEMES = ['rose', 'cherry', 'sunset', 'dark', 'cream', 'lavender', 'ocean', 'sky', 'forest'];
 const clampRating = (val) => Math.min(5, Math.max(1, Math.round(Number(val) || 1)));
 
 function getRestaurantPhotos(r) {
@@ -518,7 +519,7 @@ app.patch('/settings', (req, res) => {
     const { coupleName1, coupleName2, theme } = req.body;
     if (coupleName1 !== undefined) req.db.settings.coupleName1 = String(coupleName1).trim();
     if (coupleName2 !== undefined) req.db.settings.coupleName2 = String(coupleName2).trim();
-    if (theme !== undefined && ['rose', 'dark', 'cream', 'lavender'].includes(theme)) {
+    if (theme !== undefined && ALLOWED_THEMES.includes(theme)) {
         req.db.settings.theme = theme;
     }
     persist(req);
@@ -555,7 +556,7 @@ app.post('/backup/import', (req, res) => {
         req.db.settings = {
             coupleName1: data.settings.coupleName1 ?? req.db.settings.coupleName1 ?? '',
             coupleName2: data.settings.coupleName2 ?? req.db.settings.coupleName2 ?? '',
-            theme: ['rose', 'dark', 'cream', 'lavender'].includes(data.settings.theme) ? data.settings.theme : (req.db.settings.theme || 'rose')
+            theme: ALLOWED_THEMES.includes(data.settings.theme) ? data.settings.theme : (req.db.settings.theme || 'rose')
         };
     }
 

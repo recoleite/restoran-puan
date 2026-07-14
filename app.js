@@ -159,8 +159,21 @@ async function loadSettings() {
     applySettings();
 }
 
+const APP_THEMES = [
+    { id: 'rose', label: 'Gül', swatch: 'theme-swatch-rose' },
+    { id: 'cherry', label: 'Kiraz', swatch: 'theme-swatch-cherry' },
+    { id: 'sunset', label: 'Gün batımı', swatch: 'theme-swatch-sunset' },
+    { id: 'cream', label: 'Krem', swatch: 'theme-swatch-cream' },
+    { id: 'lavender', label: 'Lila', swatch: 'theme-swatch-lavender' },
+    { id: 'ocean', label: 'Turkuaz', swatch: 'theme-swatch-ocean' },
+    { id: 'sky', label: 'Gökyüzü', swatch: 'theme-swatch-sky' },
+    { id: 'forest', label: 'Orman', swatch: 'theme-swatch-forest' },
+    { id: 'dark', label: 'Gece', swatch: 'theme-swatch-dark' }
+];
+const ALLOWED_THEMES = APP_THEMES.map(t => t.id);
+
 function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme || 'rose');
+    document.documentElement.setAttribute('data-theme', ALLOWED_THEMES.includes(theme) ? theme : 'rose');
 }
 
 function applySettings() {
@@ -200,12 +213,7 @@ function openSettingsModal() {
     selectedTheme = appSettings.theme || 'rose';
     const modal = document.getElementById('settings-modal');
     modal.classList.remove('hidden');
-    const themes = [
-        { id: 'rose', label: 'Gül', swatch: 'theme-swatch-rose' },
-        { id: 'dark', label: 'Gece', swatch: 'theme-swatch-dark' },
-        { id: 'cream', label: 'Krem', swatch: 'theme-swatch-cream' },
-        { id: 'lavender', label: 'Lila', swatch: 'theme-swatch-lavender' }
-    ];
+    const themes = APP_THEMES;
     modal.innerHTML = `<div class="modal-box">
         <div class="flex justify-between mb-4">
             <h2 class="font-display font-semibold theme-text">Kişiselleştir</h2>
@@ -305,9 +313,14 @@ async function importBackup(ev) {
 // --- PAYLAŞILABİLİR KART ---
 const SHARE_CARD_THEMES = {
     rose: { bg: ['#fff5f5', '#fecdd3'], primary: '#e11d48', light: '#fff1f2', text: '#1f2937', muted: '#6b7280' },
+    cherry: { bg: ['#fdf2f8', '#fbcfe8'], primary: '#db2777', light: '#fce7f3', text: '#831843', muted: '#9d174d' },
+    sunset: { bg: ['#fff7ed', '#fecdd3'], primary: '#e11d48', light: '#ffedd5', text: '#7c2d12', muted: '#c2410c' },
     dark: { bg: ['#1a1015', '#251820'], primary: '#fb7185', light: '#2a1520', text: '#f3f4f6', muted: '#d1d5db' },
     cream: { bg: ['#fffdf7', '#fde68a'], primary: '#b45309', light: '#fffbeb', text: '#292524', muted: '#78716c' },
-    lavender: { bg: ['#faf5ff', '#e9d5ff'], primary: '#8b5cf6', light: '#f5f3ff', text: '#1f2937', muted: '#6b7280' }
+    lavender: { bg: ['#faf5ff', '#e9d5ff'], primary: '#8b5cf6', light: '#f5f3ff', text: '#1f2937', muted: '#6b7280' },
+    ocean: { bg: ['#f0fdfa', '#99f6e4'], primary: '#0d9488', light: '#ccfbf1', text: '#134e4a', muted: '#0f766e' },
+    sky: { bg: ['#eff6ff', '#93c5fd'], primary: '#2563eb', light: '#dbeafe', text: '#1e3a8a', muted: '#1d4ed8' },
+    forest: { bg: ['#f0fdf4', '#86efac'], primary: '#059669', light: '#dcfce7', text: '#14532d', muted: '#15803d' }
 };
 
 function getCoupleTitle() {
