@@ -1263,11 +1263,9 @@ function renderMap() {
 
 // --- LİSTE ---
 async function loadRestaurants() {
-    const search = document.getElementById('search-input').value;
     const sort = document.getElementById('sort-select').value;
     const favorite = document.getElementById('filter-favorite').checked;
     const params = new URLSearchParams({ sort });
-    if (search) params.set('search', search);
     if (favorite) params.set('favorite', 'true');
     const res = await fetch(`${API}/restaurants?${params}`);
     allRestaurants = await res.json();
@@ -1339,12 +1337,11 @@ async function openRestaurantDetail(id) {
 
 function renderList(restaurants) {
     const list = document.getElementById('restaurant-list');
-    const search = document.getElementById('search-input').value;
     const favorite = document.getElementById('filter-favorite').checked;
 
     if (!restaurants.length) {
-        if (search || favorite) {
-            list.innerHTML = renderEmptyState('🔍', 'Sonuç bulunamadı', 'Farklı bir arama deneyin veya filtreyi kaldırın');
+        if (favorite) {
+            list.innerHTML = renderEmptyState('❤️', 'Favori restoran yok', 'Favori filtresini kaldırın veya bir restorana kalp ekleyin');
         } else {
             list.innerHTML = renderEmptyState('🍽️', 'Henüz restoran yok', 'İlk buluşma restoranınızı ekleyerek başlayın!', '<button onclick="fabAddRestaurant()" class="btn-primary">İlk Restoranı Ekle</button>');
         }
@@ -1800,7 +1797,6 @@ function setupUI() {
     setDefaultDate();
     setupNameAutocomplete('add-name', 'add-name-suggest');
 
-    document.getElementById('search-input').addEventListener('input', debounce(loadRestaurants, 300));
     document.getElementById('sort-select').addEventListener('change', loadRestaurants);
     document.getElementById('filter-favorite').addEventListener('change', loadRestaurants);
     document.getElementById('add-photos').addEventListener('change', async e => {

@@ -71,11 +71,13 @@
                         <button onclick="logout()" class="icon-btn icon-btn-logout" title="Çıkış Yap">🚪</button>
                     </div>
                 </div>
-                <div class="search-bar mt-3">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="search-input" placeholder="Restoran ara..." class="search-input">
-                </div>
-                <div class="toolbar mt-3">
+                <nav class="view-tabs-bar" aria-label="Görünüm">
+                    <button id="view-list" onclick="setView('list')" class="view-tab active" title="Liste"><span class="view-tab-emoji">📋</span><span class="view-tab-label">Liste</span></button>
+                    <button id="view-map" onclick="setView('map')" class="view-tab" title="Harita"><span class="view-tab-emoji">🗺️</span><span class="view-tab-label">Harita</span></button>
+                    <button id="view-timeline" onclick="setView('timeline')" class="view-tab" title="Anılar"><span class="view-tab-emoji">📖</span><span class="view-tab-label">Anılar</span></button>
+                    <button id="view-wishlist" onclick="setView('wishlist')" class="view-tab" title="İstek listesi"><span class="view-tab-emoji">📌</span><span class="view-tab-label">İstek</span></button>
+                </nav>
+                <div class="header-filters">
                     <select id="sort-select" class="toolbar-select">
                         <option value="rating">⭐ En yüksek puan</option>
                         <option value="visits">🔄 En çok gidilen</option>
@@ -83,19 +85,13 @@
                         <option value="name">🔤 İsme göre</option>
                     </select>
                     <label class="toolbar-fav">
-                        <input type="checkbox" id="filter-favorite"> ❤️
+                        <input type="checkbox" id="filter-favorite"> <span>Sadece favoriler</span>
                     </label>
-                    <div class="view-tabs">
-                        <button id="view-list" onclick="setView('list')" class="view-tab active" title="Liste"><span class="view-tab-emoji">📋</span><span class="view-tab-label">Liste</span></button>
-                        <button id="view-map" onclick="setView('map')" class="view-tab" title="Harita"><span class="view-tab-emoji">🗺️</span><span class="view-tab-label">Harita</span></button>
-                        <button id="view-timeline" onclick="setView('timeline')" class="view-tab" title="Anılar"><span class="view-tab-emoji">📖</span><span class="view-tab-label">Anılar</span></button>
-                        <button id="view-wishlist" onclick="setView('wishlist')" class="view-tab" title="İstek listesi"><span class="view-tab-emoji">📌</span><span class="view-tab-label">İstek</span></button>
-                    </div>
                 </div>
             </div>
         </header>
 
-        <main class="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        <main class="app-main">
             <section id="dashboard" class="dashboard-section"></section>
 
             <div id="map-container" class="hidden card rounded-2xl overflow-hidden h-80 shadow-sm"></div>
