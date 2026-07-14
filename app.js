@@ -9,7 +9,9 @@ let allRestaurants = [];
 let allWishlist = [];
 let appSettings = { coupleName1: '', coupleName2: '', theme: 'rose' };
 let addPhotoData = [];
+let addCoverPhoto = null;
 let visitPhotoData = [];
+let visitCoverPhoto = null;
 let namePickerTarget = 'add';
 let currentView = 'list';
 let mapInstance = null;
@@ -733,10 +735,16 @@ async function toggleFavoriteFromDetail(id, btn) {
 }
 
 function getCoverPhoto(r) {
+    if (r.coverPhoto) return r.coverPhoto;
     const photos = (r.visits || []).flatMap(v => v.photos || []);
     if (photos.length) return photos[0];
     if (r.photos?.length) return r.photos[0];
     return null;
+}
+
+function getPhotoCount(r) {
+    if (r.photoCount != null) return r.photoCount;
+    return getAllPhotos(r).length;
 }
 
 function getAllPhotos(r, limit = 6) {
@@ -788,6 +796,68 @@ function readFilesAsBase64(files) {
         r.onerror = rej;
         r.readAsDataURL(f);
     })));
+}
+
+const PHOTO_MAX_WIDTH = 1024;
+const PHOTO_QUALITY = 0.82;
+const COVER_MAX_WIDTH = 640;
+const COVER_QUALITY = 0.78;
+
+function compressImageFile(file, maxWidth = PHOTO_MAX_WIDTH, quality = PHOTO_QUALITY) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let { width, height } = img;
+            if (width > maxWidth) {
+                height = Math.round(height * maxWidth / width);
+                width = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            reject(new Error('Fotoğraf okunamadı'));
+        };
+        img.src = url;
+    });
+}
+
+function compressDataUrl(dataUrl, maxWidth = COVER_MAX_WIDTH, quality = COVER_QUALITY) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            let { width, height } = img;
+            if (width > maxWidth) {
+                height = Math.round(height * maxWidth / width);
+                width = maxWidth;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Fotoğraf okunamadı'));
+        img.src = dataUrl;
+    });
+}
+
+async function readFilesCompressed(files) {
+    return Promise.all([...files].map(f => compressImageFile(f)));
+}
+
+async function refreshAddCoverPhoto() {
+    addCoverPhoto = addPhotoData.length ? await compressDataUrl(addPhotoData[0]) : null;
+}
+
+async function refreshVisitCoverPhoto() {
+    visitCoverPhoto = visitPhotoData.length ? await compressDataUrl(visitPhotoData[0]) : null;
 }
 
 function renderPhotoPreviews(containerId, photos, removable, removeFn) {
@@ -1270,11 +1340,9 @@ function renderVisitHistory(visits, restaurantId) {
 function renderRestaurantCard(r, index) {
     const avg = avgRating(r.myRating, r.partnerRating);
     const cover = getCoverPhoto(r);
-    const photos = getAllPhotos(r);
+    const photoCount = getPhotoCount(r);
     const initial = nameInitial(r.name);
-    const galleryKey = `card-${r.id}`;
     const perfect = Math.round(parseFloat(avg)) >= 5;
-    photoGalleries[`${galleryKey}-all`] = photos;
     const perfectClass = perfect ? ' card-perfect' : '';
     const favClass = r.favorite ? ' active' : '';
 
@@ -1285,7 +1353,7 @@ function renderRestaurantCard(r, index) {
                 <div class="card-cover-overlay"></div>
                 <div class="card-cover-info"><h3>${escapeHtml(r.name)}</h3></div>
                 <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover${favClass}" aria-label="Favori">♥</button>
-                ${photos.length > 1 ? `<span class="cover-photo-badge">${photos.length} foto</span>` : ''}
+                ${photoCount > 1 ? `<span class="cover-photo-badge">${photoCount} foto</span>` : ''}
                 <div class="cover-rating-badge"><span class="score">${avg}</span><span class="stars">${renderStars(Math.round(avg))}</span></div>
             </div>
         </article>`;
@@ -1346,7 +1414,7 @@ function renderTimeline(events) {
                 ${e.notes ? `<p class="text-sm italic mt-2 opacity-80">"${escapeHtml(e.notes)}"</p>` : ''}
                 ${e.dishes?.length ? `<p class="text-xs mt-1 opacity-60">${e.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
                 ${renderTags(e.tags)}
-                ${e.photos?.length ? renderPhotoStrip(e.photos, `timeline-${e.id}`) : ''}
+                ${e.photoCount ? `<p class="text-xs mt-2 opacity-60"><button type="button" class="text-link" onclick="openRestaurantDetail('${e.restaurantId}')">${e.photoCount} fotoğraf</button></p>` : ''}
             </div>
         </div>`;
     }).join('');
@@ -1605,6 +1673,7 @@ async function toggleFavorite(id) {
 function openVisitModal(id) {
     visitRestaurantId = id;
     visitPhotoData = [];
+    visitCoverPhoto = null;
     selectedVisitTags = [];
     const modal = document.getElementById('visit-modal');
     modal.classList.remove('hidden');
@@ -1628,12 +1697,16 @@ function openVisitModal(id) {
 }
 
 async function handleVisitPhotos(e) {
-    const photos = await readFilesAsBase64(e.target.files);
+    const photos = await readFilesCompressed(e.target.files);
     visitPhotoData = [...visitPhotoData, ...photos];
+    await refreshVisitCoverPhoto();
     renderPhotoPreviews('visit-photo-preview', visitPhotoData, true, 'removeVisitPhoto');
     e.target.value = '';
 }
-function removeVisitPhoto(i) { visitPhotoData.splice(i, 1); renderPhotoPreviews('visit-photo-preview', visitPhotoData, true, 'removeVisitPhoto'); }
+function removeVisitPhoto(i) {
+    visitPhotoData.splice(i, 1);
+    refreshVisitCoverPhoto().then(() => renderPhotoPreviews('visit-photo-preview', visitPhotoData, true, 'removeVisitPhoto'));
+}
 
 async function submitVisit(e) {
     e.preventDefault();
@@ -1642,7 +1715,8 @@ async function submitVisit(e) {
         notes: document.getElementById('visit-notes').value,
         dishes: getDishesFromForm('visit'),
         tags: selectedVisitTags,
-        photos: visitPhotoData
+        photos: visitPhotoData,
+        coverPhoto: visitCoverPhoto
     };
     await fetch(`${API}/restaurants/${visitRestaurantId}/visits`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -1769,15 +1843,19 @@ function setupUI() {
     setupNameAutocomplete('add-name', 'add-name-suggest');
 
     document.getElementById('add-photos').addEventListener('change', async e => {
-        const photos = await readFilesAsBase64(e.target.files);
+        const photos = await readFilesCompressed(e.target.files);
         addPhotoData = [...addPhotoData, ...photos];
+        await refreshAddCoverPhoto();
         renderPhotoPreviews('add-photo-preview', addPhotoData, true, 'removeAddPhoto');
         e.target.value = '';
     });
     document.getElementById('add-form').addEventListener('submit', submitAdd);
 }
 
-function removeAddPhoto(i) { addPhotoData.splice(i, 1); renderPhotoPreviews('add-photo-preview', addPhotoData, true, 'removeAddPhoto'); }
+function removeAddPhoto(i) {
+    addPhotoData.splice(i, 1);
+    refreshAddCoverPhoto().then(() => renderPhotoPreviews('add-photo-preview', addPhotoData, true, 'removeAddPhoto'));
+}
 function setDefaultDate() {
     const el = document.getElementById('add-last-visited');
     if (el) el.value = new Date().toISOString().split('T')[0];
@@ -1800,6 +1878,7 @@ async function submitAdd(e) {
         ),
         notes: document.getElementById('add-notes').value,
         photos: addPhotoData,
+        coverPhoto: addCoverPhoto,
         lastVisited: document.getElementById('add-last-visited').value,
         dishes: getDishesFromForm('add'),
         tags: selectedAddTags,

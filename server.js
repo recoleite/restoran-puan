@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '15mb' }));
 app.use(express.static(__dirname));
 
 const DEFAULT_CATEGORIES = () => ({
@@ -47,6 +47,48 @@ const migrateRestaurant = (r) => {
 };
 
 const clampRating = (val) => Math.min(5, Math.max(1, Math.round(Number(val) || 1)));
+
+function getRestaurantPhotos(r) {
+    const fromVisits = (r.visits || []).flatMap(v => v.photos || []);
+    if (fromVisits.length) return fromVisits;
+    return r.photos || [];
+}
+
+function getCoverPhoto(r) {
+    if (r.coverPhoto) return r.coverPhoto;
+    const photos = getRestaurantPhotos(r);
+    return photos[0] || null;
+}
+
+function countRestaurantPhotos(r) {
+    return getRestaurantPhotos(r).length;
+}
+
+function toRestaurantListItem(r) {
+    return {
+        id: r.id,
+        name: r.name,
+        cuisine: r.cuisine,
+        location: r.location,
+        lat: r.lat,
+        lng: r.lng,
+        myRating: r.myRating,
+        partnerRating: r.partnerRating,
+        favorite: r.favorite,
+        visitCount: r.visitCount,
+        lastVisited: r.lastVisited,
+        coverPhoto: getCoverPhoto(r),
+        photoCount: countRestaurantPhotos(r)
+    };
+}
+
+function applyCoverPhoto(restaurant, coverPhoto) {
+    if (coverPhoto) restaurant.coverPhoto = coverPhoto;
+    else if (!restaurant.coverPhoto) {
+        const photos = getRestaurantPhotos(restaurant);
+        if (photos.length) restaurant.coverPhoto = photos[0];
+    }
+}
 
 const findRestaurant = (userDb, id) => userDb.restaurants.findIndex(r => r.id === id);
 
@@ -616,7 +658,7 @@ app.get('/timeline', (req, res) => {
             cuisine: r.cuisine,
             location: r.location,
             notes: v.notes,
-            photos: v.photos || [],
+            photoCount: v.photos?.length || 0,
             dishes: v.dishes || [],
             tags: v.tags || [],
             isSpecial: (v.tags || []).some(t => ['İlk buluşma', 'Doğum günü', 'Yıldönümü', 'Özel gün', 'Kutlama'].includes(t))
@@ -656,7 +698,7 @@ app.get('/restaurants', (req, res) => {
     if (favorite === 'true') list = list.filter(r => r.favorite);
     if (cuisine) list = list.filter(r => r.cuisine.toLowerCase().includes(cuisine.toLowerCase()));
 
-    res.json(sortRestaurants(list, sort));
+    res.json(sortRestaurants(list, sort).map(toRestaurantListItem));
 });
 
 app.get('/restaurants/:id', (req, res) => {
@@ -668,7 +710,7 @@ app.get('/restaurants/:id', (req, res) => {
 app.post('/restaurants', (req, res) => {
     const {
         name, cuisine, location, myRating, partnerRating, notes, lastVisited,
-        photos, favorite, lat, lng, categories, dishes, budget, tags
+        photos, favorite, lat, lng, categories, dishes, budget, tags, coverPhoto
     } = req.body;
 
     if (!name?.trim()) return res.status(400).json({ error: 'Restoran adı zorunludur' });
@@ -704,6 +746,7 @@ app.post('/restaurants', (req, res) => {
         createdAt: now,
         updatedAt: now
     };
+    applyCoverPhoto(newRestaurant, coverPhoto);
 
     req.db.restaurants.unshift(newRestaurant);
     upsertNameRegistry(req.db, newRestaurant.name, newRestaurant.cuisine, newRestaurant.location);
@@ -731,6 +774,7 @@ app.patch('/restaurants/:id', (req, res) => {
         ...(fields.favorite !== undefined && { favorite: !!fields.favorite }),
         ...(fields.notes !== undefined && { notes: fields.notes.trim() }),
         ...(fields.photos !== undefined && { photos: Array.isArray(fields.photos) ? fields.photos : current.photos }),
+        ...(fields.coverPhoto !== undefined && { coverPhoto: fields.coverPhoto || null }),
         ...(fields.visitCount !== undefined && { visitCount: Math.max(0, Number(fields.visitCount) || 0) }),
         ...(fields.lastVisited !== undefined && { lastVisited: fields.lastVisited }),
         ...(fields.visits !== undefined && { visits: fields.visits }),
@@ -758,7 +802,7 @@ app.post('/restaurants/:id/visits', (req, res) => {
     const index = findRestaurant(req.db, req.params.id);
     if (index === -1) return res.status(404).json({ error: 'Restoran bulunamadı' });
 
-    const { date, notes, photos, dishes, budget, tags } = req.body;
+    const { date, notes, photos, dishes, budget, tags, coverPhoto } = req.body;
     const visit = {
         id: Date.now().toString(),
         date: date || new Date().toISOString().split('T')[0],
@@ -772,6 +816,7 @@ app.post('/restaurants/:id/visits', (req, res) => {
     req.db.restaurants[index].visits = req.db.restaurants[index].visits || [];
     req.db.restaurants[index].visits.unshift(visit);
     syncRestaurantFromVisits(req.db.restaurants[index]);
+    applyCoverPhoto(req.db.restaurants[index], coverPhoto);
     req.db.restaurants[index].updatedAt = new Date().toISOString();
     persist(req);
     res.json(req.db.restaurants[index]);
