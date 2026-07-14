@@ -1290,33 +1290,75 @@ async function fetchNames(search = '') {
     return res.json();
 }
 
+function formatLocationHint(location) {
+    if (!location?.trim()) return '';
+    const text = location.trim();
+    if (/google\.|maps\.|goo\.gl|share\.google/i.test(text)) return 'Konum kayıtlı';
+    return text.length > 36 ? `${text.slice(0, 34)}…` : text;
+}
+
 function fillNameFields(target, entry) {
     const p = target === 'edit' ? 'edit' : (target === 'wishlist' ? 'wishlist' : 'add');
     const nameEl = document.getElementById(`${p}-name`);
     if (nameEl) nameEl.value = entry.name;
     const locEl = document.getElementById(`${p}-location`);
     if (locEl && entry.location) locEl.value = entry.location;
+    document.getElementById('add-name-suggest')?.classList.add('hidden');
 }
 
 async function showSuggest(inputId, suggestId) {
-    const query = document.getElementById(inputId).value.trim();
-    cachedNames = await fetchNames(query);
+    const input = document.getElementById(inputId);
     const dropdown = document.getElementById(suggestId);
+    if (!input || !dropdown) return;
+
+    const query = input.value.trim();
+    if (query.length < 2) {
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    cachedNames = await fetchNames(query);
     const target = inputId.includes('edit') ? 'edit' : 'add';
-    if (!cachedNames.length) { dropdown.classList.add('hidden'); return; }
-    dropdown.innerHTML = cachedNames.map((n, i) => `
-        <button type="button" class="w-full text-left px-4 py-2 hover:bg-rose-50 text-sm" onclick="fillNameFields('${target}',cachedNames[${i}]);document.getElementById('${suggestId}').classList.add('hidden')">
-            <span class="font-medium">${escapeHtml(n.name)}</span>
-            ${n.location?`<span class="text-gray-400 text-xs ml-2">${escapeHtml(n.location)}</span>`:''}
-        </button>`).join('');
+    const exactMatch = cachedNames.some(n => n.name.toLowerCase() === query.toLowerCase());
+
+    if (!cachedNames.length) {
+        dropdown.innerHTML = `<p class="suggest-empty">"${escapeHtml(query)}" yeni bir kayıt olabilir — yazmaya devam edin.</p>`;
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = `
+        <p class="suggest-hint">Öneri — seçmek zorunda değilsiniz</p>
+        ${cachedNames.slice(0, 6).map((n, i) => `
+            <button type="button" class="suggest-item" onclick="pickSuggest('${target}', ${i}, '${suggestId}')">
+                <span class="suggest-item-name">${escapeHtml(n.name)}</span>
+                ${n.location ? `<span class="suggest-item-meta">${escapeHtml(formatLocationHint(n.location))}</span>` : ''}
+            </button>`).join('')}
+        ${exactMatch ? '' : `<p class="suggest-footer">Enter ile "<span>${escapeHtml(query)}</span>" olarak kaydedebilirsiniz</p>`}`;
+
     dropdown.classList.remove('hidden');
+}
+
+function pickSuggest(target, index, suggestId) {
+    fillNameFields(target, cachedNames[index]);
+    document.getElementById(suggestId)?.classList.add('hidden');
 }
 
 function setupNameAutocomplete(inputId, suggestId) {
     const input = document.getElementById(inputId);
-    if (!input) return;
+    const dropdown = document.getElementById(suggestId);
+    if (!input || !dropdown) return;
+
     input.addEventListener('input', () => showSuggest(inputId, suggestId));
-    input.addEventListener('focus', () => showSuggest(inputId, suggestId));
+    input.addEventListener('focus', () => {
+        if (input.value.trim().length >= 2) showSuggest(inputId, suggestId);
+    });
+    input.addEventListener('blur', () => {
+        setTimeout(() => dropdown.classList.add('hidden'), 160);
+    });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Escape') dropdown.classList.add('hidden');
+    });
 }
 
 async function openNamePicker(target) {
@@ -1324,11 +1366,16 @@ async function openNamePicker(target) {
     cachedNames = await fetchNames('');
     const modal = document.getElementById('name-picker-modal');
     modal.classList.remove('hidden');
-    modal.innerHTML = `<div class="modal-box">
-        <div class="flex justify-between mb-4"><h2 class="font-semibold text-rose-700">Kayıtlı Restoranlar</h2>
-        <button onclick="closeModal('name-picker-modal')" class="text-2xl text-gray-400">×</button></div>
-        <input type="text" id="name-picker-search" class="input mb-3" placeholder="Ara..." oninput="searchNamePicker(this.value)">
-        <div id="name-picker-list" class="max-h-60 overflow-y-auto space-y-1"></div>
+    modal.innerHTML = `<div class="modal-box name-picker-box">
+        <div class="flex justify-between mb-3">
+            <div>
+                <h2 class="font-display font-semibold theme-text">Kayıtlı mekanlar</h2>
+                <p class="name-picker-hint">Daha önce kullandığınız isimler — dokunarak doldurun</p>
+            </div>
+            <button type="button" onclick="closeModal('name-picker-modal')" class="modal-close" aria-label="Kapat">×</button>
+        </div>
+        <input type="text" id="name-picker-search" class="input" placeholder="Ara..." oninput="searchNamePicker(this.value)">
+        <div id="name-picker-list" class="name-picker-list"></div>
     </div>`;
     renderNamePickerList('');
     modal.onclick = e => { if (e.target === modal) closeModal('name-picker-modal'); };
@@ -1339,16 +1386,24 @@ function searchNamePicker(q) { renderNamePickerList(q); }
 function renderNamePickerList(search) {
     const list = document.getElementById('name-picker-list');
     if (!list) return;
-    const filtered = search ? cachedNames.filter(n =>
-        n.name.toLowerCase().includes(search.toLowerCase()) ||
-        n.location.toLowerCase().includes(search.toLowerCase())
+    const q = search.trim().toLowerCase();
+    const filtered = q ? cachedNames.filter(n =>
+        n.name.toLowerCase().includes(q) ||
+        (n.location || '').toLowerCase().includes(q)
     ) : cachedNames;
-    list.innerHTML = filtered.length ? filtered.map((n) => `
-        <button type="button" onclick="fillNameFields('${namePickerTarget}',cachedNames[${cachedNames.indexOf(n)}]);closeModal('name-picker-modal')"
-            class="w-full text-left px-4 py-3 rounded-xl hover:bg-rose-50">
-            <div class="font-medium">${escapeHtml(n.name)}</div>
-            ${n.location?`<div class="text-xs text-gray-400">${escapeHtml(n.location)}</div>`:''}
-        </button>`).join('') : '<p class="text-gray-400 text-center py-4 text-sm">Kayıt bulunamadı</p>';
+
+    list.innerHTML = filtered.length ? filtered.map((n) => {
+        const index = cachedNames.indexOf(n);
+        return `<button type="button" class="name-picker-item" onclick="pickNameFromList(${index})">
+            <span class="name-picker-item-name">${escapeHtml(n.name)}</span>
+            ${n.location ? `<span class="name-picker-item-meta">${escapeHtml(formatLocationHint(n.location))}</span>` : ''}
+        </button>`;
+    }).join('') : '<p class="name-picker-empty">Kayıt bulunamadı</p>';
+}
+
+function pickNameFromList(index) {
+    fillNameFields(namePickerTarget, cachedNames[index]);
+    closeModal('name-picker-modal');
 }
 
 function closeModal(id) {
