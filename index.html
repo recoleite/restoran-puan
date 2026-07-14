@@ -57,9 +57,12 @@
         <header class="app-header">
             <div class="max-w-5xl mx-auto px-4 py-3">
                 <div class="flex items-center justify-between gap-3">
-                    <div class="min-w-0">
-                        <h1 id="app-title" class="font-display app-title">Bizim Restoranlarımız</h1>
-                        <p id="app-subtitle" class="app-subtitle">Birlikte keşfettiğimiz lezzetler</p>
+                    <div class="min-w-0 flex items-center gap-3">
+                        <div class="brand-mark" aria-hidden="true">🍽</div>
+                        <div class="min-w-0">
+                            <h1 id="app-title" class="font-display app-title">Bizim Restoranlarımız</h1>
+                            <p id="app-subtitle" class="app-subtitle">Birlikte keşfettiğimiz lezzetler</p>
+                        </div>
                     </div>
                     <div class="header-actions">
                         <button onclick="openShareCardModal()" class="icon-btn" title="Paylaş">📤</button>
@@ -83,10 +86,10 @@
                         <input type="checkbox" id="filter-favorite"> ❤️
                     </label>
                     <div class="view-tabs">
-                        <button id="view-list" onclick="setView('list')" class="view-tab-icon active" title="Liste">📋</button>
-                        <button id="view-map" onclick="setView('map')" class="view-tab-icon" title="Harita">🗺️</button>
-                        <button id="view-timeline" onclick="setView('timeline')" class="view-tab-icon" title="Anılar">📖</button>
-                        <button id="view-wishlist" onclick="setView('wishlist')" class="view-tab-icon" title="İstek listesi">📌</button>
+                        <button id="view-list" onclick="setView('list')" class="view-tab active" title="Liste"><span class="view-tab-emoji">📋</span><span class="view-tab-label">Liste</span></button>
+                        <button id="view-map" onclick="setView('map')" class="view-tab" title="Harita"><span class="view-tab-emoji">🗺️</span><span class="view-tab-label">Harita</span></button>
+                        <button id="view-timeline" onclick="setView('timeline')" class="view-tab" title="Anılar"><span class="view-tab-emoji">📖</span><span class="view-tab-label">Anılar</span></button>
+                        <button id="view-wishlist" onclick="setView('wishlist')" class="view-tab" title="İstek listesi"><span class="view-tab-emoji">📌</span><span class="view-tab-label">İstek</span></button>
                     </div>
                 </div>
             </div>
@@ -97,10 +100,13 @@
 
             <div id="map-container" class="hidden card rounded-2xl overflow-hidden h-80 shadow-sm"></div>
 
-            <section id="add-section" class="card rounded-2xl p-6 shadow-sm">
-                <button onclick="toggleAddForm()" class="flex items-center justify-between w-full text-left">
-                    <h2 class="section-title">Yeni Restoran Ekle</h2>
-                    <span id="add-form-toggle" class="text-xl theme-text">+</span>
+            <section id="add-section" class="panel-card add-panel">
+                <button onclick="toggleAddForm()" class="add-panel-toggle">
+                    <div class="add-panel-head">
+                        <span class="add-panel-icon">✨</span>
+                        <h2 class="section-title">Yeni Restoran Ekle</h2>
+                    </div>
+                    <span id="add-form-toggle" class="add-panel-chevron">+</span>
                 </button>
                 <form id="add-form" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
                     <div class="sm:col-span-2 relative">
@@ -149,7 +155,7 @@
             </section>
 
             <section id="list-section">
-                <h2 class="section-title mb-4">Restoranlarımız</h2>
+                <h2 class="section-heading"><span class="section-heading-text">Restoranlarımız</span></h2>
                 <div id="restaurant-list" class="restaurant-list-grid">
                     <div class="skeleton-card"></div>
                     <div class="skeleton-card"></div>
@@ -157,13 +163,13 @@
             </section>
 
             <section id="timeline-section" class="hidden">
-                <h2 class="section-title mb-4">Anı Defterimiz</h2>
+                <h2 class="section-heading"><span class="section-heading-text">Anı Defterimiz</span></h2>
                 <div id="timeline-list" class="space-y-0"></div>
             </section>
 
             <section id="wishlist-section" class="hidden">
                 <div class="flex justify-between items-center mb-4">
-                    <h2 class="section-title">Gitmek İstediklerimiz</h2>
+                    <h2 class="section-heading mb-0"><span class="section-heading-text">Gitmek İstediklerimiz</span></h2>
                     <button onclick="openWishlistAddModal()" class="btn-secondary text-sm">+ Ekle</button>
                 </div>
                 <div id="wishlist-list" class="space-y-3"></div>

@@ -1145,16 +1145,33 @@ function renderDashboard(s) {
         el.innerHTML = '';
         return;
     }
+    const { coupleName1, coupleName2 } = appSettings;
+    const greeting = coupleName1 && coupleName2
+        ? `${coupleName1} & ${coupleName2}`
+        : 'Lezzet günlüğünüz';
     el.innerHTML = `
+        <div class="dash-hero">
+            <div class="dash-hero-copy">
+                <p class="dash-hero-kicker">Hoş geldiniz</p>
+                <h2 class="dash-hero-title font-display">${escapeHtml(greeting)}</h2>
+                <p class="dash-hero-sub">${s.restaurantCount} mekân · ${s.visitCount} anı${s.avgRating ? ` · ortalama ${s.avgRating}★` : ''}</p>
+            </div>
+            <div class="dash-hero-badge">
+                <span class="dash-hero-badge-num">${s.avgRating || '—'}</span>
+                <span class="dash-hero-badge-label">ortalama</span>
+            </div>
+        </div>
         <div class="stats-row">
             <div class="stat-pill"><div class="stat-num">${s.restaurantCount}</div><div class="stat-label">Restoran</div></div>
             <div class="stat-pill"><div class="stat-num">${s.visitCount}</div><div class="stat-label">Ziyaret</div></div>
             <div class="stat-pill"><div class="stat-num">${s.favoriteCount}</div><div class="stat-label">Favori</div></div>
+            <div class="stat-pill"><div class="stat-num">${s.wishlistCount || 0}</div><div class="stat-label">İstek</div></div>
         </div>
         <div class="dashboard-grid">
-            <div class="dashboard-card"><div class="dash-icon">🏆</div><div class="dash-value">${s.topRestaurant ? escapeHtml(s.topRestaurant.name) : '—'}</div><div class="dash-label">En çok gidilen${s.topRestaurant ? ` (${s.topRestaurant.visits}x)` : ''}</div></div>
-            <div class="dashboard-card"><div class="dash-icon">⭐</div><div class="dash-value">${s.topRated ? escapeHtml(s.topRated.name) : '—'}</div><div class="dash-label">En yüksek${s.topRated ? ` (${s.topRated.rating}★)` : ''}</div></div>
-            <div class="dashboard-card"><div class="dash-icon">📅</div><div class="dash-value">${s.monthVisits}</div><div class="dash-label">Bu ay</div></div>
+            <div class="dashboard-card dash-card-gold"><div class="dash-icon">🏆</div><div class="dash-value">${s.topRestaurant ? escapeHtml(s.topRestaurant.name) : '—'}</div><div class="dash-label">En çok gidilen${s.topRestaurant ? ` · ${s.topRestaurant.visits}×` : ''}</div></div>
+            <div class="dashboard-card dash-card-star"><div class="dash-icon">⭐</div><div class="dash-value">${s.topRated ? escapeHtml(s.topRated.name) : '—'}</div><div class="dash-label">En yüksek${s.topRated ? ` · ${s.topRated.rating}★` : ''}</div></div>
+            <div class="dashboard-card dash-card-cal"><div class="dash-icon">📅</div><div class="dash-value">${s.monthVisits}</div><div class="dash-label">Bu ayki ziyaret</div></div>
+            ${s.topCuisine ? `<div class="dashboard-card dash-card-food"><div class="dash-icon">🍽</div><div class="dash-value">${escapeHtml(s.topCuisine.name)}</div><div class="dash-label">Favori mutfak · ${s.topCuisine.count}×</div></div>` : ''}
         </div>`;
 }
 
@@ -1769,7 +1786,10 @@ async function deleteRestaurant(id) {
 // --- EKLEME ---
 function toggleAddForm() {
     const form = document.getElementById('add-form');
-    document.getElementById('add-form-toggle').textContent = form.classList.toggle('hidden') ? '+' : '−';
+    const section = document.getElementById('add-section');
+    const hidden = form.classList.toggle('hidden');
+    section?.classList.toggle('add-panel-open', !hidden);
+    document.getElementById('add-form-toggle').textContent = hidden ? '+' : '−';
 }
 
 function setupUI() {
