@@ -16,12 +16,22 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
 
-function readAuthToken(req) {
-    const header = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-    if (header) return header;
+function readBearerToken(req) {
+    return req.headers.authorization?.replace(/^Bearer\s+/i, '') || '';
+}
+
+function readCookieToken(req) {
     const raw = req.headers.cookie || '';
     const match = raw.match(new RegExp(`(?:^|;\\s*)${AUTH_COOKIE}=([^;]*)`));
     return match ? decodeURIComponent(match[1]) : '';
+}
+
+function resolveAuthToken(req) {
+    const bearer = readBearerToken(req);
+    const cookie = readCookieToken(req);
+    if (bearer && userStore.verifyToken(bearer)) return bearer;
+    if (cookie && userStore.verifyToken(cookie)) return cookie;
+    return '';
 }
 
 function setAuthCookie(res, token, req) {
@@ -42,7 +52,7 @@ function clearAuthCookie(res) {
 }
 
 function requireAuthPage(req, res, next) {
-    if (!userStore.verifyToken(readAuthToken(req))) {
+    if (!resolveAuthToken(req)) {
         return res.redirect('/login.html');
     }
     next();
@@ -59,13 +69,16 @@ function sendLoginPage(req, res) {
 }
 
 app.get(['/app', '/app.html'], requireAuthPage, sendAppPage);
-app.get(['/login', '/login.html'], sendLoginPage);
+app.get(['/login', '/login.html'], (req, res) => {
+    if (resolveAuthToken(req)) return res.redirect('/app');
+    sendLoginPage(req, res);
+});
 app.get('/', (req, res) => {
-    if (userStore.verifyToken(readAuthToken(req))) return res.redirect('/app');
+    if (resolveAuthToken(req)) return res.redirect('/app');
     res.redirect('/login.html');
 });
 app.get('/index.html', (req, res) => {
-    if (userStore.verifyToken(readAuthToken(req))) return res.redirect('/app');
+    if (resolveAuthToken(req)) return res.redirect('/app');
     res.redirect('/login.html');
 });
 
@@ -241,10 +254,10 @@ function attachUserDb(req) {
 }
 
 function requireAuth(req, res, next) {
-    const token = readAuthToken(req);
-    const payload = userStore.verifyToken(token);
-    if (!payload) return res.status(401).json({ error: 'Giriş gerekli' });
-    req.userId = payload.userId;
+    const token = resolveAuthToken(req);
+    if (!token) return res.status(401).json({ error: 'Giriş gerekli' });
+    req.authToken = token;
+    req.userId = userStore.verifyToken(token).userId;
     attachUserDb(req);
     next();
 }
@@ -316,6 +329,7 @@ app.post('/auth/logout', (req, res) => {
 });
 
 app.get('/auth/me', requireAuth, (req, res) => {
+    setAuthCookie(res, req.authToken, req);
     const user = userStore.findUserById(req.userId);
     if (!user) return res.status(401).json({ error: 'Kullanıcı bulunamadı' });
     res.json({

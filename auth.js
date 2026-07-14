@@ -31,8 +31,12 @@ function redirectToApp() {
 
 async function initAuthPage() {
     const meRes = await fetch(`${API}/auth/me`);
-    if (meRes.ok) redirectToApp();
-    else localStorage.removeItem('authToken');
+    if (!meRes.ok) {
+        localStorage.removeItem('authToken');
+        return;
+    }
+    const data = await meRes.json().catch(() => null);
+    if (data?.user) redirectToApp();
 }
 
 async function login() {
