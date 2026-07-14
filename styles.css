@@ -716,7 +716,7 @@ body.auth-pending { visibility: hidden; }
 
 /* ===== HEADER ===== */
 .app-header { position: sticky; top: 0; z-index: 50; background: var(--header-bg); backdrop-filter: blur(16px); border-bottom: 1px solid var(--border); }
-.header-inner { max-width: 40rem; margin: 0 auto; padding: 1rem 1rem 0; }
+.header-inner { max-width: 40rem; margin: 0 auto; padding: 1rem 1rem 0.85rem; }
 .header-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .brand { min-width: 0; }
 .app-title { font-size: 1.65rem; line-height: 1.12; margin: 0; color: var(--text); letter-spacing: -0.01em; }
@@ -733,7 +733,7 @@ body.auth-pending { visibility: hidden; }
 .nav-tab.active { color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 12px var(--accent-glow); }
 
 /* ===== MAIN ===== */
-.app-main { max-width: 40rem; margin: 0 auto; padding: 1.25rem 1rem 5rem; display: flex; flex-direction: column; gap: 1.5rem; }
+.app-main { max-width: 40rem; margin: 0 auto; padding: 1.5rem 1rem 5rem; display: flex; flex-direction: column; gap: 1.5rem; }
 .section-head { margin-bottom: 0.85rem; }
 .section-head-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .section-title { font-size: 1.45rem; margin: 0; color: var(--accent); letter-spacing: -0.01em; font-style: italic; }
