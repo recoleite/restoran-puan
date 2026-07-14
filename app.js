@@ -7,6 +7,7 @@ const CUISINE_EMOJI = {
     'deniz': '🦐', 'balık': '🐟', 'vegan': '🥗', 'tatlı': '🍰', 'meksika': '🌮',
     'hint': '🍛', 'fransız': '🥐', 'kore': '🍜', 'fast': '🍟'
 };
+const CATEGORY_LABELS = { food: 'Yemek', service: 'Servis', atmosphere: 'Atmosfer', price: 'Fiyat' };
 
 let cachedNames = [];
 let allRestaurants = [];
@@ -527,11 +528,193 @@ function getCuisineEmoji(cuisine) {
     return '🍽️';
 }
 
+function getCoupleLabels() {
+    return {
+        mine: appSettings.coupleName1 || 'Sen',
+        partner: appSettings.coupleName2 || 'Sevgilin'
+    };
+}
+
 function getAgreementBadge(my, partner) {
     const diff = Math.abs(my - partner);
     if (diff === 0) return '<span class="agreement-badge agreement-match">🤝 Tam uyum</span>';
     if (diff >= 2) return '<span class="agreement-badge agreement-debate">💬 Tartışmalı</span>';
     return '';
+}
+
+function getTopDishes(r, limit = 4) {
+    const dishMap = {};
+    (r.visits || []).forEach(v => {
+        (v.dishes || []).forEach(d => {
+            if (!d.name) return;
+            if (!dishMap[d.name]) dishMap[d.name] = { count: 0, totalRating: 0 };
+            dishMap[d.name].count++;
+            dishMap[d.name].totalRating += Number(d.rating) || 0;
+        });
+    });
+    return Object.entries(dishMap)
+        .map(([name, info]) => ({ name, avg: info.totalRating / info.count, count: info.count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, limit);
+}
+
+function renderDetailCategories(categories) {
+    if (!categories) return '';
+    const rows = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
+        const cat = categories[key];
+        if (!cat) return '';
+        const avg = (Number(cat.my) + Number(cat.partner)) / 2;
+        const pct = Math.max(8, (avg / 5) * 100);
+        return `<div class="detail-category-row">
+            <div class="detail-category-head"><span>${label}</span><span class="detail-category-score">${avg.toFixed(1)}</span></div>
+            <div class="detail-category-bar"><div class="detail-category-fill" style="width:${pct}%"></div></div>
+        </div>`;
+    }).join('');
+    if (!rows.trim()) return '';
+    return `<section class="detail-section"><h3 class="detail-section-title">Detaylı puanlar</h3><div class="detail-categories">${rows}</div></section>`;
+}
+
+function renderDetailDishes(r) {
+    const dishes = getTopDishes(r);
+    if (!dishes.length) return '';
+    return `<section class="detail-section"><h3 class="detail-section-title">Favori lezzetler</h3>
+        <div class="detail-dish-list">${dishes.map(d =>
+            `<div class="detail-dish-item"><span class="detail-dish-name">${escapeHtml(d.name)}</span>
+            <span class="detail-dish-meta">${d.avg.toFixed(1)}★ · ${d.count}×</span></div>`
+        ).join('')}</div></section>`;
+}
+
+function renderDetailVisits(visits, restaurantId) {
+    if (!visits?.length) return '';
+    const sorted = [...visits].sort((a, b) => b.date.localeCompare(a.date));
+    return `<section class="detail-section"><div class="detail-section-head">
+        <h3 class="detail-section-title">Son anılar</h3>
+        ${sorted.length > 2 ? `<button type="button" onclick="closeModal('detail-modal');openHistoryModal('${restaurantId}')" class="detail-link-btn">Tümü (${sorted.length})</button>` : ''}
+    </div>
+    <div class="detail-visit-list">${sorted.slice(0, 3).map(v => {
+        const isSpecial = (v.tags || []).some(t => SPECIAL_TAGS.has(t));
+        const parts = formatDateParts(v.date);
+        return `<article class="detail-visit-card ${isSpecial ? 'special' : ''}">
+            <div class="detail-visit-date"><span class="day">${parts.day}</span><span class="month">${parts.month}</span></div>
+            <div class="detail-visit-body">
+                ${isSpecial ? '<span class="detail-visit-badge">✨ Özel gün</span>' : ''}
+                ${v.notes ? `<p class="detail-visit-note">"${escapeHtml(v.notes)}"</p>` : ''}
+                ${v.dishes?.length ? `<p class="detail-visit-dishes">${v.dishes.map(d => `${escapeHtml(d.name)} ${d.rating}★`).join(' · ')}</p>` : ''}
+                ${renderTags(v.tags, false)}
+                ${v.photos?.length ? renderPhotoStrip(v.photos, `detail-visit-${restaurantId}-${v.id}`) : ''}
+            </div>
+        </article>`;
+    }).join('')}</div></section>`;
+}
+
+function renderDetailPhotos(photos, cover, galleryKey) {
+    if (!photos.length) return '';
+    photoGalleries[`${galleryKey}-all`] = photos;
+    if (photos.length === 1 && cover) return '';
+    const gallery = cover ? photos.slice(1) : photos;
+    if (!gallery.length) return '';
+    photoGalleries[galleryKey] = gallery;
+    const bentoClass = gallery.length === 1 ? 'photo-bento-1'
+        : gallery.length === 2 ? 'photo-bento-2'
+        : gallery.length === 3 ? 'photo-bento-3' : 'photo-bento-4';
+    const frames = gallery.slice(0, 4).map((p, i) => {
+        const hasMore = i === 3 && gallery.length > 4;
+        return `<button type="button" class="photo-frame" onclick="openLightboxGallery('${galleryKey}',${i})">
+            <img src="${p}" alt="" loading="lazy">
+            ${hasMore ? `<span class="photo-more">+${gallery.length - 4}</span>` : ''}
+        </button>`;
+    }).join('');
+    return `<section class="detail-section detail-photo-section">
+        <h3 class="detail-section-title">Fotoğraflar <span class="detail-photo-count">${photos.length}</span></h3>
+        <div class="photo-bento detail-photo-bento ${bentoClass}">${frames}</div>
+    </section>`;
+}
+
+function buildDetailModalHtml(r) {
+    const avg = avgRating(r.myRating, r.partnerRating);
+    const photos = getAllPhotos(r, 12);
+    const cover = getCoverPhoto(r);
+    const galleryKey = `detail-${r.id}`;
+    const agreement = getAgreementBadge(r.myRating, r.partnerRating);
+    const labels = getCoupleLabels();
+    const emoji = getCuisineEmoji(r.cuisine);
+    const perfect = Math.round(parseFloat(avg)) >= 5;
+    const totalBudget = (r.visits || []).reduce((sum, v) => sum + (Number(v.budget) || 0), 0);
+    const mapLink = r.lat && r.lng
+        ? `https://www.google.com/maps?q=${r.lat},${r.lng}`
+        : null;
+
+    const hero = cover
+        ? `<img src="${cover}" class="detail-hero-img" alt="" onclick="openLightboxGallery('${galleryKey}-all',0)">`
+        : `<div class="detail-hero-placeholder"><span class="detail-hero-emoji">${emoji}</span></div>`;
+
+    return `<div class="modal-box detail-modal-box${perfect ? ' detail-perfect' : ''}">
+        <div class="detail-hero">
+            ${hero}
+            <div class="detail-hero-gradient"></div>
+            <div class="detail-hero-top">
+                <button type="button" onclick="closeModal('detail-modal')" class="detail-icon-btn" aria-label="Kapat">×</button>
+                <button type="button" onclick="event.stopPropagation();toggleFavoriteFromDetail('${r.id}', this)" class="detail-icon-btn detail-fav-btn ${r.favorite ? 'active' : ''}" aria-label="Favori">${r.favorite ? '❤️' : '🤍'}</button>
+            </div>
+            <div class="detail-hero-bottom">
+                <div class="detail-hero-score">
+                    <span class="detail-hero-score-num">${avg}</span>
+                    <span class="detail-hero-score-stars">${renderStars(Math.round(avg), 'text-amber-300', 'text-white/30')}</span>
+                </div>
+                ${photos.length > 1 ? `<span class="detail-hero-photo-count">📸 ${photos.length}</span>` : ''}
+            </div>
+        </div>
+        <div class="detail-body">
+            <div class="detail-title-block">
+                <h2 class="detail-title">${escapeHtml(r.name)}</h2>
+                <div class="detail-meta">
+                    ${r.cuisine ? `<span class="detail-chip">${emoji} ${escapeHtml(r.cuisine)}</span>` : ''}
+                    ${r.location ? `<span class="detail-chip">📍 ${escapeHtml(r.location)}</span>` : ''}
+                    ${mapLink ? `<a href="${mapLink}" target="_blank" rel="noopener" class="detail-chip detail-chip-link">Haritada aç</a>` : ''}
+                </div>
+                <div class="detail-stats">
+                    <span class="detail-stat"><strong>${r.visitCount || 0}</strong> ziyaret</span>
+                    <span class="detail-stat-dot">·</span>
+                    <span class="detail-stat">Son: ${formatDate(r.lastVisited)}</span>
+                    ${totalBudget > 0 ? `<span class="detail-stat-dot">·</span><span class="detail-stat">${totalBudget.toLocaleString('tr-TR')} ₺</span>` : ''}
+                </div>
+                ${agreement ? `<div class="detail-agreement">${agreement}</div>` : ''}
+            </div>
+            <div class="detail-rating-grid">
+                <div class="detail-rating-card">
+                    <span class="detail-rating-label">${escapeHtml(labels.mine)}</span>
+                    <span class="detail-rating-value">${r.myRating}</span>
+                    <span class="detail-rating-stars">${renderStars(r.myRating)}</span>
+                </div>
+                <div class="detail-rating-card detail-rating-card-partner">
+                    <span class="detail-rating-label">${escapeHtml(labels.partner)}</span>
+                    <span class="detail-rating-value">${r.partnerRating}</span>
+                    <span class="detail-rating-stars">${renderStars(r.partnerRating)}</span>
+                </div>
+            </div>
+            ${r.notes ? `<blockquote class="detail-note">"${escapeHtml(r.notes)}"</blockquote>` : ''}
+            ${renderDetailCategories(r.categories)}
+            ${renderDetailDishes(r)}
+            ${renderDetailPhotos(photos, cover, galleryKey)}
+            ${renderDetailVisits(r.visits, r.id)}
+        </div>
+        <div class="detail-actions">
+            <button type="button" onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="detail-action-btn primary"><span>➕</span>Ziyaret</button>
+            <button type="button" onclick="closeModal('detail-modal');openHistoryModal('${r.id}')" class="detail-action-btn"><span>📖</span>Geçmiş</button>
+            <button type="button" onclick="closeModal('detail-modal');openEditModal('${r.id}')" class="detail-action-btn"><span>✏️</span>Düzenle</button>
+            <button type="button" onclick="closeModal('detail-modal');deleteRestaurant('${r.id}')" class="detail-action-btn danger"><span>🗑️</span>Sil</button>
+        </div>
+    </div>`;
+}
+
+async function toggleFavoriteFromDetail(id, btn) {
+    await fetch(`${API}/restaurants/${id}/favorite`, { method: 'POST' });
+    const active = btn.classList.toggle('active');
+    btn.textContent = active ? '❤️' : '🤍';
+    btn.classList.add('pop');
+    setTimeout(() => btn.classList.remove('pop'), 500);
+    loadRestaurants();
+    loadStats();
 }
 
 function getCoverPhoto(r) {
@@ -1105,47 +1288,9 @@ function renderRestaurantCard(r, index) {
 async function openRestaurantDetail(id) {
     const res = await fetch(`${API}/restaurants/${id}`);
     const r = await res.json();
-    const avg = avgRating(r.myRating, r.partnerRating);
-    const photos = getAllPhotos(r);
-    const cover = getCoverPhoto(r);
-    const galleryKey = `detail-${r.id}`;
-    photoGalleries[`${galleryKey}-all`] = photos;
-    const agreement = getAgreementBadge(r.myRating, r.partnerRating);
-
     const modal = document.getElementById('detail-modal');
     modal.classList.remove('hidden');
-    modal.innerHTML = `<div class="modal-box max-w-lg">
-        <div class="flex justify-between items-start mb-3">
-            <div>
-                <h2 class="font-display text-xl font-bold text-rose-700">${escapeHtml(r.name)}</h2>
-                <p class="text-sm text-gray-500 mt-0.5">${escapeHtml(r.location || '')}${r.lat && r.lng ? ' 📍' : ''}</p>
-            </div>
-            <button onclick="closeModal('detail-modal')" class="text-2xl text-gray-400 leading-none">×</button>
-        </div>
-        ${cover ? `<img src="${cover}" class="detail-cover cursor-pointer" onclick="openLightboxGallery('${galleryKey}-all',0)">` : ''}
-        <div class="flex flex-wrap items-center gap-3 mb-3">
-            <div class="rating-badge"><div class="text-2xl font-bold text-rose-500 leading-none">${avg}</div>
-            <div class="text-amber-400 text-sm">${renderStars(Math.round(avg))}</div></div>
-            ${agreement}
-        </div>
-        <div class="flex flex-wrap gap-4 text-sm mb-3">
-            <span><span class="text-gray-500">Senin:</span> ${renderStars(r.myRating)}</span>
-            <span><span class="text-gray-500">Sevgilinin:</span> ${renderStars(r.partnerRating)}</span>
-        </div>
-        ${r.notes ? `<p class="text-sm text-gray-600 mt-3 italic">"${escapeHtml(r.notes)}"</p>` : ''}
-        <div class="flex gap-4 mt-2 text-xs text-gray-400">
-            <span>${r.visitCount} ziyaret</span>
-            <span>${formatDate(r.lastVisited)}</span>
-        </div>
-        ${renderPhotoSection(photos, !!cover, galleryKey)}
-        ${renderVisitHistory(r.visits, r.id)}
-        <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-rose-100">
-            <button onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="visit-btn bg-emerald-50 hover:bg-emerald-100 text-emerald-600 text-sm font-medium px-4 py-2 rounded-xl">+1 Ziyaret</button>
-            <button onclick="closeModal('detail-modal');openHistoryModal('${r.id}')" class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-sm font-medium px-4 py-2 rounded-xl">Geçmiş</button>
-            <button onclick="closeModal('detail-modal');openEditModal('${r.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-sm font-medium px-4 py-2 rounded-xl">Düzenle</button>
-            <button onclick="closeModal('detail-modal');deleteRestaurant('${r.id}')" class="bg-gray-50 hover:bg-red-50 text-gray-500 text-sm font-medium px-4 py-2 rounded-xl">Sil</button>
-        </div>
-    </div>`;
+    modal.innerHTML = buildDetailModalHtml(r);
     modal.onclick = e => { if (e.target === modal) closeModal('detail-modal'); };
 }
 
