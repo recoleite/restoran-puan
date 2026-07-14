@@ -113,22 +113,6 @@ function flashToast(msg, { confetti = false, fun = false } = {}) {
     sessionStorage.setItem('toast', JSON.stringify({ msg, confetti, fun }));
 }
 
-function getFunBanner(s) {
-    const n = s.restaurantCount || 0;
-    if (n === 1) return 'İlk restoran kaydedildi — macera başladı!';
-    if (n === 5) return '5 mekân! Artık çark için güzel bir havuz var.';
-    if (n === 10) return '10 restoran — resmen lezzet arşivi oldunuz.';
-    if (n === 25) return '25 mekân… Bu artık bir gastronomi atlası.';
-    if (s.favoriteCount >= 3 && s.avgRating >= 4.5) return 'Favoriler sağlam, damak tadınız uyumlu görünüyor.';
-    if (s.monthVisits >= 3) return `Bu ay ${s.monthVisits} ziyaret — oldukça aktif bir çift!`;
-    if (s.topRated?.rating >= 5) return `${s.topRated.name} 5★ — taç mekânınız belli.`;
-    return pickOne([
-        'Her kart bir anı, her anı bir hikâye.',
-        'Paylaş sekmesinden özet kartı oluşturabilirsiniz.',
-        'İstek listesinden hayal mekânlarını ekleyin.'
-    ]);
-}
-
 function buildSubtitleLines() {
     const { coupleName1, coupleName2 } = appSettings;
     const lines = [...FUN_SUBTITLES];
@@ -680,8 +664,11 @@ function formatDate(d) {
     return new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-function renderStars(rating, filled = 'text-amber-400', empty = 'text-gray-200') {
-    return Array.from({ length: 5 }, (_, i) => `<span class="${i < rating ? filled : empty}">★</span>`).join('');
+function renderStars(rating, variant = 'default') {
+    const empty = variant === 'on-dark' ? 'star-off-on-dark' : 'star-off';
+    return Array.from({ length: 5 }, (_, i) =>
+        `<span class="${i < rating ? 'star-on' : empty}" aria-hidden="true">★</span>`
+    ).join('');
 }
 
 function nameInitial(name) {
@@ -845,7 +832,7 @@ function buildDetailModalHtml(r) {
             <div class="detail-hero-bottom">
                 <div class="detail-hero-score">
                     <span class="detail-hero-score-num">${avg}</span>
-                    <span class="detail-hero-score-stars">${renderStars(Math.round(avg), 'text-amber-300', 'text-white/30')}</span>
+                    <span class="detail-hero-score-stars">${renderStars(Math.round(avg), 'on-dark')}</span>
                 </div>
                 ${photos.length > 1 ? `<span class="detail-hero-photo-count">${photos.length} foto</span>` : ''}
             </div>
@@ -928,7 +915,7 @@ function buildStarPicker(containerId, hiddenId, initial = 3) {
     hidden.value = initial;
     container.innerHTML = Array.from({ length: 5 }, (_, i) => {
         const v = i + 1;
-        return `<span class="star-btn ${v <= initial ? 'text-amber-400' : 'text-gray-200'}" onclick="setStar('${containerId}','${hiddenId}',${v})">★</span>`;
+        return `<span class="star-btn ${v <= initial ? 'star-on' : 'star-off'}" onclick="setStar('${containerId}','${hiddenId}',${v})">★</span>`;
     }).join('');
 }
 
@@ -936,7 +923,7 @@ function setStar(containerId, hiddenId, val) {
     document.getElementById(hiddenId).value = val;
     const container = document.getElementById(containerId);
     container.querySelectorAll('.star-btn').forEach((s, i) => {
-        s.className = `star-btn ${i < val ? 'text-amber-400' : 'text-gray-200'}`;
+        s.className = `star-btn ${i < val ? 'star-on' : 'star-off'}`;
     });
     if (val === 5) {
         container.classList.add('stars-max');
@@ -1390,7 +1377,6 @@ function renderDashboard(s) {
     if (s.topCuisine) highlights.push({ label: 'Favori mutfak', value: `${escapeHtml(s.topCuisine.name)} · ${s.topCuisine.count}×` });
 
     el.innerHTML = `
-        <p class="dash-fun-banner">${escapeHtml(getFunBanner(s))}</p>
         <div class="dash-summary">
             <div class="dash-stat"><span class="dash-stat-value">${s.restaurantCount}</span><span class="dash-stat-label">Restoran</span></div>
             <div class="dash-stat"><span class="dash-stat-value">${s.visitCount}</span><span class="dash-stat-label">Ziyaret</span></div>
@@ -1535,7 +1521,7 @@ function renderRestaurantCard(r, index) {
                 <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover${favClass}" aria-label="Favori">♥</button>
                 ${perfect ? '<span class="perfect-badge">Mükemmel</span>' : ''}
                 ${photoCount > 1 ? `<span class="cover-photo-badge">${photoCount} foto</span>` : ''}
-                <div class="cover-rating-badge"><span class="score">${avg}</span><span class="stars">${renderStars(Math.round(avg))}</span></div>
+                <div class="cover-rating-badge"><span class="score">${avg}</span><span class="stars stars-compact">${renderStars(Math.round(avg), 'on-dark')}</span></div>
             </div>
         </article>`;
     }
