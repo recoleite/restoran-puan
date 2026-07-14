@@ -571,28 +571,35 @@ async function drawRestaurantShareCard(r) {
     const theme = SHARE_CARD_THEMES[appSettings.theme] || SHARE_CARD_THEMES.rose;
     const labels = getCoupleLabels();
     const avg = avgRating(r.myRating, r.partnerRating);
-    const visitDate = r.lastVisited ? formatDate(r.lastVisited) : '—';
+    const visitDate = r.lastVisited ? formatDate(r.lastVisited) : '';
+    const locationHint = formatLocationHint(r.location);
+    const cuisineLine = r.cuisine?.trim() || '';
     const cover = getCoverPhoto(r);
     const img = await loadCanvasImage(cover);
-    const frameX = 60;
-    const frameY = 60;
-    const frameW = w - 120;
-    const frameH = h - 120;
-    const heroH = img ? 520 : 0;
-    const contentY = frameY + heroH + (img ? 36 : 80);
+
+    const pad = 60;
+    const frameX = pad;
+    const frameY = pad;
+    const frameW = w - pad * 2;
+    const frameH = h - pad * 2;
+    const innerX = frameX + 48;
+    const innerW = frameW - 96;
+    const footerY = frameY + frameH - 52;
 
     paintShareCardFrame(ctx, w, h, theme);
 
+    const heroH = img ? Math.min(500, Math.round(frameH * 0.4)) : 0;
+
     if (img) {
         ctx.save();
-        roundRect(ctx, frameX, frameY, frameW, heroH + 24, 48);
+        roundRect(ctx, frameX, frameY, frameW, frameH, 48);
         ctx.clip();
         drawCanvasCoverImage(ctx, img, frameX, frameY, frameW, heroH);
-        const overlay = ctx.createLinearGradient(0, frameY + heroH - 180, 0, frameY + heroH);
+        const overlay = ctx.createLinearGradient(0, frameY + heroH - 190, 0, frameY + heroH + 20);
         overlay.addColorStop(0, 'rgba(0,0,0,0)');
-        overlay.addColorStop(1, 'rgba(0,0,0,0.72)');
+        overlay.addColorStop(1, 'rgba(0,0,0,0.78)');
         ctx.fillStyle = overlay;
-        ctx.fillRect(frameX, frameY + heroH - 180, frameW, 180);
+        ctx.fillRect(frameX, frameY + heroH - 190, frameW, 210);
         ctx.restore();
         ctx.strokeStyle = theme.primary;
         ctx.lineWidth = 4;
@@ -601,113 +608,157 @@ async function drawRestaurantShareCard(r) {
 
         ctx.textAlign = 'left';
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 68px "Instrument Serif", Georgia, serif';
-        const nameLines = wrapCanvasText(ctx, r.name, frameW - 80);
-        nameLines.slice(0, 2).forEach((line, i) => ctx.fillText(line, frameX + 40, frameY + heroH - 70 + i * 74));
+        ctx.font = 'bold 62px "Instrument Serif", Georgia, serif';
+        wrapCanvasText(ctx, r.name, innerW).slice(0, 2).forEach((line, i) => {
+            ctx.fillText(line, innerX, frameY + heroH - 58 + i * 68);
+        });
+    }
+
+    const catEntries = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
+        const cat = r.categories?.[key];
+        if (!cat) return null;
+        return { label, value: avgRating(cat.my, cat.partner) };
+    }).filter(Boolean);
+
+    ctx.font = 'bold 62px "Instrument Serif", Georgia, serif';
+    const nameLineCount = Math.min(2, wrapCanvasText(ctx, r.name, innerW).length);
+
+    let blockH = 0;
+    if (!img) blockH += 108;
+    blockH += nameLineCount * 68 + (img ? 0 : 16);
+    if (visitDate) blockH += 40;
+    if (cuisineLine) blockH += 36;
+    if (locationHint) blockH += 36;
+    blockH += 118 + 148;
+    if (catEntries.length) blockH += 88;
+    if (r.notes?.trim()) blockH += 118;
+    if ((r.visitCount || 0) > 1) blockH += 32;
+
+    const contentAreaTop = img ? frameY + heroH + 36 : frameY + 48;
+    const contentAreaBottom = footerY - 36;
+    let y = img
+        ? contentAreaTop
+        : contentAreaTop + Math.max(0, (contentAreaBottom - contentAreaTop - blockH) / 2);
+
+    if (!img) {
+        const cx = w / 2;
+        const cy = y + 44;
+        ctx.fillStyle = theme.light;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 44, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = theme.primary;
+        ctx.globalAlpha = 0.35;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = theme.primary;
+        ctx.font = 'italic 52px "Instrument Serif", Georgia, serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(nameInitial(r.name), cx, cy + 18);
+        y += 108;
     }
 
     ctx.textAlign = 'center';
     if (!img) {
-        ctx.fillStyle = theme.primary;
-        ctx.font = 'italic 56px "Instrument Serif", Georgia, serif';
-        ctx.fillText(nameInitial(r.name), w / 2, contentY - 10);
         ctx.fillStyle = theme.text;
-        ctx.font = 'bold 68px "Instrument Serif", Georgia, serif';
-        const nameLines = wrapCanvasText(ctx, r.name, frameW - 80);
-        nameLines.slice(0, 2).forEach((line, i) => ctx.fillText(line, w / 2, contentY + 70 + i * 76));
+        ctx.font = 'bold 62px "Instrument Serif", Georgia, serif';
+        wrapCanvasText(ctx, r.name, innerW).slice(0, 2).forEach((line, i) => {
+            ctx.fillText(line, w / 2, y + 52 + i * 68);
+        });
+        y += nameLineCount * 68 + 20;
+    } else {
+        y += 8;
     }
 
-    const metaY = img ? contentY + 10 : contentY + (wrapCanvasText(ctx, r.name, frameW - 80).length > 1 ? 190 : 120);
+    ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
-    ctx.font = '500 30px "DM Sans", system-ui, sans-serif';
-    const metaParts = [visitDate !== '—' ? visitDate : null, r.cuisine, r.location].filter(Boolean);
-    const metaText = metaParts.slice(0, 2).join(' · ');
-    if (metaText) {
-        const metaLines = wrapCanvasText(ctx, metaText, frameW - 100);
-        metaLines.slice(0, 2).forEach((line, i) => ctx.fillText(line, w / 2, metaY + i * 38));
+    if (visitDate) {
+        ctx.fillText(visitDate, w / 2, y + 28);
+        y += 40;
+    }
+    if (cuisineLine) {
+        wrapCanvasText(ctx, cuisineLine, innerW).slice(0, 1).forEach(line => {
+            ctx.fillText(line, w / 2, y + 26);
+        });
+        y += 36;
+    }
+    if (locationHint) {
+        wrapCanvasText(ctx, locationHint, innerW).slice(0, 1).forEach(line => {
+            ctx.fillText(line, w / 2, y + 26);
+        });
+        y += 36;
     }
 
-    const scoreY = metaY + (metaText ? 72 : 20);
+    y += 12;
     ctx.fillStyle = theme.primary;
-    ctx.font = 'bold 120px "DM Sans", system-ui, sans-serif';
-    ctx.fillText(`${avg}★`, w / 2, scoreY + 40);
-    ctx.font = '500 36px "DM Sans", system-ui, sans-serif';
+    ctx.font = 'bold 88px "DM Sans", system-ui, sans-serif';
+    ctx.fillText(`${avg} ★`, w / 2, y + 72);
+    ctx.font = '500 32px "DM Sans", system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
-    ctx.fillText(canvasStarString(avg), w / 2, scoreY + 88);
+    ctx.fillText(canvasStarString(avg), w / 2, y + 112);
+    y += 130;
 
-    const ratingY = scoreY + 150;
-    const ratingCols = [
-        { label: labels.mine, value: r.myRating },
-        { label: labels.partner, value: r.partnerRating }
-    ];
-    ratingCols.forEach((col, i) => {
-        const x = i === 0 ? w / 2 - 210 : w / 2 + 210;
+    const ratingY = y;
+    [{ label: labels.mine, value: r.myRating }, { label: labels.partner, value: r.partnerRating }].forEach((col, i) => {
+        const x = i === 0 ? w / 2 - 200 : w / 2 + 200;
         ctx.fillStyle = theme.light;
-        roundRect(ctx, x - 170, ratingY, 340, 130, 24);
+        roundRect(ctx, x - 165, ratingY, 330, 118, 22);
         ctx.fill();
         ctx.strokeStyle = theme.primary;
         ctx.globalAlpha = 0.22;
         ctx.stroke();
         ctx.globalAlpha = 1;
         ctx.textAlign = 'center';
-        ctx.font = '600 28px "DM Sans", system-ui, sans-serif';
+        ctx.font = '600 26px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText(col.label, x, ratingY + 44);
-        ctx.font = 'bold 52px "DM Sans", system-ui, sans-serif';
+        ctx.fillText(col.label, x, ratingY + 40);
+        ctx.font = 'bold 46px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.text;
-        ctx.fillText(`${col.value} ★`, x, ratingY + 98);
+        ctx.fillText(`${col.value} ★`, x, ratingY + 92);
     });
-
-    let extraY = ratingY + 170;
-    const categories = r.categories || {};
-    const catEntries = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
-        const cat = categories[key];
-        if (!cat) return null;
-        const catAvg = avgRating(cat.my, cat.partner);
-        return { label, value: catAvg };
-    }).filter(Boolean);
+    y = ratingY + 148;
 
     if (catEntries.length) {
         ctx.textAlign = 'center';
-        ctx.font = '600 26px "DM Sans", system-ui, sans-serif';
+        ctx.font = '600 24px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText('Detay puanlar', w / 2, extraY);
-        extraY += 44;
-        const catText = catEntries.map(c => `${c.label} ${c.value}`).join('  ·  ');
-        ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
-        wrapCanvasText(ctx, catText, frameW - 120).slice(0, 2).forEach((line, i) => {
-            ctx.fillText(line, w / 2, extraY + i * 36);
+        ctx.fillText('Detay puanlar', w / 2, y + 24);
+        const catText = catEntries.map(c => `${c.label} ${c.value}`).join('   ·   ');
+        ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
+        wrapCanvasText(ctx, catText, innerW).slice(0, 2).forEach((line, i) => {
+            ctx.fillText(line, w / 2, y + 62 + i * 32);
         });
-        extraY += 56;
+        y += catEntries.length ? 88 : 0;
     }
 
-    if (r.notes) {
-        ctx.textAlign = 'center';
+    if (r.notes?.trim()) {
+        const noteH = 100;
         ctx.fillStyle = theme.light;
-        roundRect(ctx, 120, extraY, w - 240, 120, 20);
+        roundRect(ctx, innerX, y, innerW, noteH, 18);
         ctx.fill();
         ctx.strokeStyle = theme.primary;
         ctx.globalAlpha = 0.2;
         ctx.stroke();
         ctx.globalAlpha = 1;
-        ctx.font = 'italic 30px "Cormorant Garamond", Georgia, serif';
+        ctx.font = 'italic 28px "Cormorant Garamond", Georgia, serif';
         ctx.fillStyle = theme.text;
-        const noteLines = wrapCanvasText(ctx, `"${r.notes}"`, w - 320);
-        noteLines.slice(0, 2).forEach((line, i) => ctx.fillText(line, w / 2, extraY + 52 + i * 38));
-        extraY += 140;
+        wrapCanvasText(ctx, `"${r.notes.trim()}"`, innerW - 40).slice(0, 2).forEach((line, i) => {
+            ctx.fillText(line, w / 2, y + 44 + i * 34);
+        });
+        y += noteH + 16;
     }
 
-    if (r.visitCount > 1) {
-        ctx.textAlign = 'center';
-        ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
+    if ((r.visitCount || 0) > 1) {
+        ctx.font = '500 24px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText(`${r.visitCount} ziyaret`, w / 2, Math.min(extraY + 20, h - 180));
+        ctx.fillText(`${r.visitCount} ziyaret`, w / 2, Math.min(y + 24, footerY - 20));
     }
 
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.muted;
-    ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
-    ctx.fillText(`${getCoupleTitle()} · Lezzet günlüğü`, w / 2, h - 120);
+    ctx.font = '500 24px "DM Sans", system-ui, sans-serif';
+    ctx.fillText(`${getCoupleTitle()} · Lezzet günlüğü`, w / 2, footerY);
 }
 
 function openShareCardModalShell(title, subtitle) {
