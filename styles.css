@@ -709,8 +709,20 @@ body {
 .dish-remove:hover { background: #fee2e2; color: #dc2626; }
 
 /* ===== RESTAURANT GRID ===== */
-.restaurant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.85rem; align-items: start; }
-.restaurant-card { overflow: hidden; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); cursor: pointer; transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s; animation: fadeUp 0.35s ease both; box-shadow: 0 4px 14px var(--shadow); width: 100%; }
+.restaurant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.85rem; }
+.restaurant-card {
+    position: relative;
+    aspect-ratio: 4/3;
+    width: 100%;
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s;
+    animation: fadeUp 0.35s ease both;
+    box-shadow: 0 4px 14px var(--shadow);
+}
 .restaurant-card:hover { box-shadow: 0 10px 28px var(--shadow-lg); transform: translateY(-3px); border-color: var(--accent-muted); }
 .card-score-stack {
     position: absolute;
@@ -793,7 +805,12 @@ body {
 .restaurant-card.card-perfect { border-color: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 40%, transparent), 0 8px 24px var(--shadow-lg); }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
-.card-cover { aspect-ratio: 4/3; position: relative; overflow: hidden; background: var(--surface-2); width: 100%; }
+.card-cover {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: var(--surface-2);
+}
 .card-cover-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.4s ease; }
 .card-cover:hover .card-cover-img { transform: scale(1.03); }
 .card-cover-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.55), transparent 50%); pointer-events: none; }
@@ -829,11 +846,40 @@ body {
 .cover-rating-badge .stars-compact { font-size: 0.5rem; gap: 0.05rem; justify-content: center; display: flex; }
 .cover-photo-badge { position: absolute; top: 10px; right: 10px; z-index: 2; background: rgba(0,0,0,0.5); color: white; font-size: 0.65rem; font-weight: 600; padding: 0.15rem 0.45rem; border-radius: 99px; }
 
-.card-placeholder { aspect-ratio: 4/3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.35rem; padding: 1rem 0.85rem 0.85rem; background: linear-gradient(145deg, var(--accent-soft), var(--surface-2)); position: relative; }
-.card-monogram { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.5rem; color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 2px solid color-mix(in srgb, white 60%, var(--accent-muted)); box-shadow: 0 4px 12px var(--accent-glow); }
-.card-placeholder .name { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.1rem; text-align: center; color: var(--text); line-height: 1.2; margin-bottom: 0; }
-.card-placeholder .rating-inline { font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-top: 0.15rem; }
-.card-placeholder .card-rating-unit { margin-top: 0.2rem; }
+.card-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    padding: 2.4rem 0.65rem 2.6rem;
+    background: linear-gradient(145deg, var(--accent-soft), var(--surface-2));
+    overflow: hidden;
+}
+.card-monogram { width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.35rem; color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); border: 2px solid color-mix(in srgb, white 60%, var(--accent-muted)); box-shadow: 0 4px 12px var(--accent-glow); flex-shrink: 0; }
+.card-placeholder .name { font-family: 'Instrument Serif', serif; font-style: italic; font-size: clamp(0.9rem, 3.5vw, 1.05rem); text-align: center; color: var(--text); line-height: 1.15; margin: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 0.25rem; }
+.card-placeholder .rating-inline {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    margin: 0;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    padding: 0.25rem 0.45rem;
+    box-shadow: 0 2px 8px var(--shadow);
+}
+.card-placeholder .card-rating-unit {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    margin: 0;
+}
 .card-placeholder .card-rating-unit .card-score-label {
     border-color: color-mix(in srgb, var(--gold) 50%, var(--border));
 }
