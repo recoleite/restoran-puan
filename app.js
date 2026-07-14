@@ -189,6 +189,7 @@ function applySettings() {
                 : subtitleText;
         }
     });
+    updateRatingLabels();
 }
 
 let selectedTheme = 'rose';
@@ -535,6 +536,22 @@ function getCoupleLabels() {
     };
 }
 
+function getRatingLabels() {
+    const { mine, partner } = getCoupleLabels();
+    return {
+        mine: `${mine} Puanı`,
+        partner: `${partner} Puanı`
+    };
+}
+
+function updateRatingLabels() {
+    const labels = getRatingLabels();
+    const myLabel = document.getElementById('add-my-rating-label');
+    const partnerLabel = document.getElementById('add-partner-rating-label');
+    if (myLabel) myLabel.textContent = labels.mine;
+    if (partnerLabel) partnerLabel.textContent = labels.partner;
+}
+
 function getAgreementBadge(my, partner) {
     const diff = Math.abs(my - partner);
     if (diff === 0) return '<span class="agreement-badge agreement-match">🤝 Tam uyum</span>';
@@ -581,53 +598,6 @@ function hasDistinctCategories(categories) {
         return (Number(cat.my) + Number(cat.partner)) / 2;
     }).filter(v => v != null);
     return new Set(avgs.map(v => v.toFixed(1))).size > 1;
-}
-
-function renderDetailInsights(r) {
-    const visits = r.visits || [];
-    const photos = getAllPhotos(r, 99);
-    const totalDishes = visits.reduce((sum, v) => sum + (v.dishes?.length || 0), 0);
-    const specialVisits = visits.filter(v => (v.tags || []).some(t => SPECIAL_TAGS.has(t))).length;
-    const allTags = [...new Set(visits.flatMap(v => v.tags || []))];
-    const totalBudget = visits.reduce((sum, v) => sum + (Number(v.budget) || 0), 0);
-    const sorted = [...visits].sort((a, b) => a.date.localeCompare(b.date));
-    const firstVisit = sorted[0]?.date;
-
-    const cards = [];
-    if (photos.length) cards.push({ emoji: '📸', value: photos.length, label: 'fotoğraf' });
-    if (totalDishes) cards.push({ emoji: '🍽', value: totalDishes, label: 'yemek kaydı' });
-    if (specialVisits) cards.push({ emoji: '✨', value: specialVisits, label: 'özel gün' });
-    if (totalBudget > 0) cards.push({ emoji: '💰', value: totalBudget.toLocaleString('tr-TR'), label: '₺ harcama' });
-    if (firstVisit && visits.length > 1) cards.push({ emoji: '🗓', value: formatDate(firstVisit), label: 'ilk ziyaret' });
-
-    if (!cards.length && !allTags.length) {
-        if (!visits.length) {
-            return `<section class="detail-section detail-empty-section">
-                <div class="detail-empty-card">
-                    <span class="detail-empty-icon">📝</span>
-                    <p class="detail-empty-title">Henüz anı yok</p>
-                    <p class="detail-empty-desc">İlk ziyaretini ekleyerek not, fotoğraf ve yemek kaydı tutmaya başlayın.</p>
-                    <button type="button" onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="detail-empty-btn">+ İlk ziyareti ekle</button>
-                </div>
-            </section>`;
-        }
-        return '';
-    }
-
-    let html = '';
-    if (cards.length) {
-        html += `<div class="detail-insight-grid">${cards.map(c =>
-            `<div class="detail-insight-card">
-                <span class="detail-insight-emoji">${c.emoji}</span>
-                <span class="detail-insight-value">${c.value}</span>
-                <span class="detail-insight-label">${c.label}</span>
-            </div>`
-        ).join('')}</div>`;
-    }
-    if (allTags.length) {
-        html += `<div class="detail-tags-wrap"><p class="detail-tags-label">Etiketler</p>${renderTags(allTags)}</div>`;
-    }
-    return `<section class="detail-section detail-insights"><h3 class="detail-section-title">Özet</h3>${html}</section>`;
 }
 
 function renderDetailDishes(r) {
@@ -749,7 +719,6 @@ function buildDetailModalHtml(r) {
                 </div>
             </div>
             ${r.notes ? `<blockquote class="detail-note">"${escapeHtml(r.notes)}"</blockquote>` : ''}
-            ${renderDetailInsights(r)}
             ${renderDetailCategories(r.categories)}
             ${renderDetailDishes(r)}
             ${renderDetailPhotos(photos, cover, galleryKey)}
@@ -1736,6 +1705,7 @@ async function deleteVisit(restaurantId, visitId) {
 async function openEditModal(id) {
     const res = await fetch(`${API}/restaurants/${id}`);
     const r = await res.json();
+    const labels = getRatingLabels();
     const modal = document.getElementById('edit-modal');
     modal.classList.remove('hidden');
     modal.innerHTML = `<div class="modal-box">
@@ -1750,8 +1720,8 @@ async function openEditModal(id) {
                 <p id="edit-location-status" class="text-xs mt-1 hidden"></p>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                <div><label class="label">Senin Puanın</label><div id="edit-my-rating" class="stars"></div><input type="hidden" id="edit-my-rating-val" value="${r.myRating}"></div>
-                <div><label class="label">Sevgilinin</label><div id="edit-partner-rating" class="stars"></div><input type="hidden" id="edit-partner-rating-val" value="${r.partnerRating}"></div>
+                <div><label class="label">${escapeHtml(labels.mine)}</label><div id="edit-my-rating" class="stars"></div><input type="hidden" id="edit-my-rating-val" value="${r.myRating}"></div>
+                <div><label class="label">${escapeHtml(labels.partner)}</label><div id="edit-partner-rating" class="stars"></div><input type="hidden" id="edit-partner-rating-val" value="${r.partnerRating}"></div>
             </div>
             <div><label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" id="edit-favorite" class="rounded text-rose-500" ${r.favorite?'checked':''}> Favori</label></div>
             <div class="flex gap-3">
