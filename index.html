@@ -6,8 +6,7 @@
     <title>Bizim Restoranlarımız</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
@@ -15,168 +14,163 @@
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <link rel="stylesheet" href="styles.css" />
 </head>
-<body class="font-sans">
-
-    <div class="bg-blobs" aria-hidden="true">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
-    </div>
+<body>
 
     <!-- Giriş -->
     <div id="login-screen" class="login-screen hidden">
-        <div class="login-card card">
-            <div class="login-hearts">💕</div>
-            <div class="login-icon">🍽️</div>
-            <h1 id="login-title" class="font-display login-title">Lezzet Günlüğü</h1>
-            <p id="login-subtitle" class="login-subtitle">Kendi restoran listeni oluştur</p>
+        <div class="login-card">
+            <p class="login-kicker">Lezzet günlüğü</p>
+            <h1 id="login-title" class="font-display login-title">Bizim Restoranlarımız</h1>
+            <p id="login-subtitle" class="login-subtitle">Birlikte keşfettiğiniz mekânları kaydedin</p>
             <div class="auth-tabs">
                 <button type="button" id="auth-tab-login" class="auth-tab active" onclick="switchAuthTab('login')">Giriş</button>
                 <button type="button" id="auth-tab-register" class="auth-tab" onclick="switchAuthTab('register')">Kayıt Ol</button>
             </div>
-            <div id="login-form" class="auth-form space-y-3">
-                <input type="email" id="login-email" placeholder="E-posta" class="input login-input" autocomplete="email">
-                <input type="password" id="login-password" placeholder="Şifre" class="input login-input" autocomplete="current-password">
-                <button onclick="login()" class="btn-primary w-full login-btn">Giriş Yap</button>
+            <div id="login-form" class="auth-form">
+                <input type="email" id="login-email" placeholder="E-posta" class="input" autocomplete="email">
+                <input type="password" id="login-password" placeholder="Şifre" class="input" autocomplete="current-password">
+                <button onclick="login()" class="btn-primary w-full">Giriş Yap</button>
             </div>
-            <div id="register-form" class="auth-form space-y-3 hidden">
-                <input type="email" id="register-email" placeholder="E-posta" class="input login-input" autocomplete="email">
-                <input type="password" id="register-password" placeholder="Şifre (min. 6)" class="input login-input" autocomplete="new-password">
-                <div class="grid grid-cols-2 gap-2">
+            <div id="register-form" class="auth-form hidden">
+                <input type="email" id="register-email" placeholder="E-posta" class="input" autocomplete="email">
+                <input type="password" id="register-password" placeholder="Şifre (min. 6)" class="input" autocomplete="new-password">
+                <div class="input-row">
                     <input type="text" id="register-name1" placeholder="Senin adın" class="input">
                     <input type="text" id="register-name2" placeholder="Partner adı" class="input">
                 </div>
-                <input type="text" id="register-invite" placeholder="Davet kodu" class="input login-input" required>
-                <button onclick="register()" class="btn-primary w-full login-btn">Hesap Oluştur</button>
+                <input type="text" id="register-invite" placeholder="Davet kodu" class="input" required>
+                <button onclick="register()" class="btn-primary w-full">Hesap Oluştur</button>
             </div>
-            <p id="login-error" class="text-red-500 text-sm mt-3 hidden"></p>
+            <p id="login-error" class="form-error hidden"></p>
         </div>
     </div>
 
     <div id="app" class="hidden">
         <header class="app-header">
-            <div class="max-w-5xl mx-auto px-4 py-3">
-                <div class="flex items-center justify-between gap-3">
-                    <div class="min-w-0 flex items-center gap-3">
-                        <div class="brand-mark" aria-hidden="true">🍽</div>
-                        <div class="min-w-0">
-                            <h1 id="app-title" class="font-display app-title">Bizim Restoranlarımız</h1>
-                            <p id="app-subtitle" class="app-subtitle">Birlikte keşfettiğimiz lezzetler</p>
-                        </div>
+            <div class="header-inner">
+                <div class="header-top">
+                    <div class="brand">
+                        <h1 id="app-title" class="font-display app-title">Bizim Restoranlarımız</h1>
+                        <p id="app-subtitle" class="app-subtitle">Birlikte keşfettiğimiz lezzetler</p>
                     </div>
                     <div class="header-actions">
-                        <button onclick="openShareCardModal()" class="icon-btn" title="Paylaş">📤</button>
-                        <button onclick="openRouletteModal()" class="icon-btn" title="Nereye gidelim?">🎲</button>
-                        <button onclick="openSettingsModal()" class="icon-btn" title="Ayarlar">⚙️</button>
-                        <button onclick="logout()" class="icon-btn icon-btn-logout" title="Çıkış Yap">🚪</button>
+                        <button type="button" onclick="openShareCardModal()" class="header-link">Paylaş</button>
+                        <button type="button" onclick="openRouletteModal()" class="header-link">Seç</button>
+                        <button type="button" onclick="openSettingsModal()" class="header-link">Ayarlar</button>
+                        <button type="button" onclick="logout()" class="header-link header-link-muted">Çıkış</button>
                     </div>
                 </div>
-                <nav class="view-tabs-bar" aria-label="Görünüm">
-                    <button id="view-list" onclick="setView('list')" class="view-tab active" title="Liste"><span class="view-tab-emoji">📋</span><span class="view-tab-label">Liste</span></button>
-                    <button id="view-map" onclick="setView('map')" class="view-tab" title="Harita"><span class="view-tab-emoji">🗺️</span><span class="view-tab-label">Harita</span></button>
-                    <button id="view-timeline" onclick="setView('timeline')" class="view-tab" title="Anılar"><span class="view-tab-emoji">📖</span><span class="view-tab-label">Anılar</span></button>
-                    <button id="view-wishlist" onclick="setView('wishlist')" class="view-tab" title="İstek listesi"><span class="view-tab-emoji">📌</span><span class="view-tab-label">İstek</span></button>
+                <nav class="nav-tabs" aria-label="Görünüm">
+                    <button type="button" id="view-list" onclick="setView('list')" class="nav-tab active">Liste</button>
+                    <button type="button" id="view-map" onclick="setView('map')" class="nav-tab">Harita</button>
+                    <button type="button" id="view-timeline" onclick="setView('timeline')" class="nav-tab">Anılar</button>
+                    <button type="button" id="view-wishlist" onclick="setView('wishlist')" class="nav-tab">İstek</button>
                 </nav>
-                <div class="header-filters">
-                    <select id="sort-select" class="toolbar-select">
-                        <option value="rating">⭐ En yüksek puan</option>
-                        <option value="visits">🔄 En çok gidilen</option>
-                        <option value="date">📅 En son ziyaret</option>
-                        <option value="name">🔤 İsme göre</option>
-                    </select>
-                    <label class="toolbar-fav">
-                        <input type="checkbox" id="filter-favorite"> <span>Sadece favoriler</span>
-                    </label>
-                </div>
             </div>
         </header>
 
         <main class="app-main">
             <section id="dashboard" class="dashboard-section"></section>
 
-            <div id="map-container" class="hidden card rounded-2xl overflow-hidden h-80 shadow-sm"></div>
+            <div id="map-container" class="map-panel hidden"></div>
 
-            <section id="add-section" class="panel-card add-panel">
-                <button onclick="toggleAddForm()" class="add-panel-toggle">
-                    <div class="add-panel-head">
-                        <span class="add-panel-icon">✨</span>
-                        <h2 class="section-title">Yeni Restoran Ekle</h2>
-                    </div>
-                    <span id="add-form-toggle" class="add-panel-chevron">+</span>
+            <section id="add-section" class="add-panel">
+                <button type="button" onclick="toggleAddForm()" class="add-panel-toggle">
+                    <span class="add-panel-title">Yeni restoran ekle</span>
+                    <span id="add-form-toggle" class="add-panel-chevron" aria-hidden="true">+</span>
                 </button>
-                <form id="add-form" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                    <div class="sm:col-span-2 relative">
-                        <label class="label">Restoran Adı *</label>
-                        <div class="flex gap-2">
-                            <div class="relative flex-1">
-                                <input type="text" id="add-name" required autocomplete="off" class="input" placeholder="Yazmaya başla...">
-                                <div id="add-name-suggest" class="suggest-dropdown hidden absolute left-0 right-0 top-full mt-1 bg-white border border-rose-200 rounded-xl shadow-lg z-20"></div>
+                <form id="add-form" class="add-form hidden">
+                    <div class="form-span">
+                        <label class="label" for="add-name">Restoran adı</label>
+                        <div class="input-group">
+                            <div class="input-wrap">
+                                <input type="text" id="add-name" required autocomplete="off" class="input" placeholder="Ad yazın">
+                                <div id="add-name-suggest" class="suggest-dropdown hidden"></div>
                             </div>
-                            <button type="button" onclick="openNamePicker('add')" class="btn-secondary shrink-0">Listeden Seç</button>
+                            <button type="button" onclick="openNamePicker('add')" class="btn-secondary">Listeden seç</button>
                         </div>
                     </div>
-                    <div class="sm:col-span-2">
-                        <label class="label">Konum <span class="text-gray-400 font-normal">(harita için)</span></label>
-                        <div class="flex gap-2">
-                            <input type="text" id="add-location" class="input flex-1" placeholder="Google Maps linki veya Kadıköy Moda">
-                            <button type="button" onclick="geocodeLocation('add')" class="btn-secondary shrink-0">Konumu Bul</button>
+                    <div class="form-span">
+                        <label class="label" for="add-location">Konum</label>
+                        <div class="input-group">
+                            <input type="text" id="add-location" class="input" placeholder="Google Maps linki veya adres">
+                            <button type="button" onclick="geocodeLocation('add')" class="btn-secondary">Bul</button>
                         </div>
-                        <p id="add-location-status" class="text-xs mt-1 hidden"></p>
+                        <p id="add-location-status" class="field-hint hidden"></p>
                     </div>
-                    <div><label class="label" id="add-my-rating-label">Senin Puanın</label><div id="add-my-rating" class="stars"></div><input type="hidden" id="add-my-rating-val" value="3"></div>
-                    <div><label class="label" id="add-partner-rating-label">Sevgilinin Puanı</label><div id="add-partner-rating" class="stars"></div><input type="hidden" id="add-partner-rating-val" value="3"></div>
-                    <div><label class="label">Ziyaret Tarihi</label><input type="date" id="add-last-visited" class="input"></div>
-                    <div class="sm:col-span-2">
-                        <label class="label">Ne Yedik?</label>
-                        <div id="add-dishes" class="space-y-2"></div>
-                        <button type="button" onclick="addDishRow('add')" class="text-sm theme-text mt-1 hover:underline">+ Yemek ekle</button>
+                    <div class="form-grid">
+                        <div>
+                            <label class="label" id="add-my-rating-label" for="add-my-rating">Puanın</label>
+                            <div id="add-my-rating" class="stars"></div>
+                            <input type="hidden" id="add-my-rating-val" value="3">
+                        </div>
+                        <div>
+                            <label class="label" id="add-partner-rating-label" for="add-partner-rating">Partner</label>
+                            <div id="add-partner-rating" class="stars"></div>
+                            <input type="hidden" id="add-partner-rating-val" value="3">
+                        </div>
                     </div>
-                    <div class="sm:col-span-2">
-                        <label class="label">Özel Gün Etiketleri</label>
-                        <div id="add-tags" class="flex flex-wrap gap-2"></div>
+                    <div>
+                        <label class="label" for="add-last-visited">Ziyaret tarihi</label>
+                        <input type="date" id="add-last-visited" class="input">
                     </div>
-                    <div class="sm:col-span-2"><label class="label">Not / Yorum</label><textarea id="add-notes" rows="2" class="input resize-none" placeholder="Neler beğendiniz?"></textarea></div>
-                    <div class="sm:col-span-2">
-                        <label class="label">Fotoğraflar</label>
+                    <div class="form-span">
+                        <label class="label">Yemekler</label>
+                        <div id="add-dishes" class="dish-list"></div>
+                        <button type="button" onclick="addDishRow('add')" class="text-link">+ Yemek ekle</button>
+                    </div>
+                    <div class="form-span">
+                        <label class="label">Etiketler</label>
+                        <div id="add-tags" class="tag-row"></div>
+                    </div>
+                    <div class="form-span">
+                        <label class="label" for="add-notes">Not</label>
+                        <textarea id="add-notes" rows="3" class="input textarea" placeholder="Neler beğendiniz?"></textarea>
+                    </div>
+                    <div class="form-span">
+                        <label class="label" for="add-photos">Fotoğraflar</label>
                         <input type="file" id="add-photos" accept="image/*" multiple class="file-input">
-                        <div id="add-photo-preview" class="flex flex-wrap gap-2 mt-2"></div>
+                        <div id="add-photo-preview" class="photo-preview"></div>
                     </div>
-                    <div class="sm:col-span-2">
-                        <label class="flex items-center gap-2 cursor-pointer text-sm"><input type="checkbox" id="add-favorite" class="rounded"> Tekrar gidelim (Favori)</label>
-                    </div>
-                    <div class="sm:col-span-2">
-                        <button type="submit" class="btn-primary">Ekle</button>
-                    </div>
+                    <label class="checkbox-row">
+                        <input type="checkbox" id="add-favorite">
+                        <span>Favorilere ekle</span>
+                    </label>
+                    <button type="submit" class="btn-primary">Kaydet</button>
                 </form>
             </section>
 
             <section id="list-section">
-                <h2 class="section-heading"><span class="section-heading-text">Restoranlarımız</span></h2>
-                <div id="restaurant-list" class="restaurant-list-grid">
+                <div class="section-head">
+                    <h2 class="section-title font-display">Restoranlar</h2>
+                </div>
+                <div id="restaurant-list" class="restaurant-grid">
                     <div class="skeleton-card"></div>
                     <div class="skeleton-card"></div>
                 </div>
             </section>
 
             <section id="timeline-section" class="hidden">
-                <h2 class="section-heading"><span class="section-heading-text">Anı Defterimiz</span></h2>
-                <div id="timeline-list" class="space-y-0"></div>
+                <div class="section-head">
+                    <h2 class="section-title font-display">Anılar</h2>
+                </div>
+                <div id="timeline-list" class="timeline-list"></div>
             </section>
 
             <section id="wishlist-section" class="hidden">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="section-heading mb-0"><span class="section-heading-text">Gitmek İstediklerimiz</span></h2>
-                    <button onclick="openWishlistAddModal()" class="btn-secondary text-sm">+ Ekle</button>
+                <div class="section-head section-head-row">
+                    <h2 class="section-title font-display">İstek listesi</h2>
+                    <button type="button" onclick="openWishlistAddModal()" class="btn-secondary btn-sm">Ekle</button>
                 </div>
-                <div id="wishlist-list" class="space-y-3"></div>
+                <div id="wishlist-list" class="wishlist-list"></div>
             </section>
         </main>
 
-        <button id="fab" onclick="openFabMenu()" class="fab" title="Hızlı ekle">+</button>
+        <button type="button" id="fab" onclick="openFabMenu()" class="fab" title="Hızlı ekle">+</button>
         <div id="fab-menu" class="fab-menu hidden">
-            <button onclick="fabAddRestaurant()" class="fab-menu-item">🍽 Restoran Ekle</button>
-            <button onclick="openWishlistAddModal()" class="fab-menu-item">📌 İstek Listesine Ekle</button>
-            <button onclick="openRouletteModal()" class="fab-menu-item">🎲 Nereye Gidelim?</button>
+            <button type="button" onclick="fabAddRestaurant()" class="fab-menu-item">Restoran ekle</button>
+            <button type="button" onclick="openWishlistAddModal()" class="fab-menu-item">İstek listesine ekle</button>
+            <button type="button" onclick="openRouletteModal()" class="fab-menu-item">Rastgele seç</button>
         </div>
     </div>
 
@@ -193,11 +187,11 @@
     <div id="photo-lightbox" class="lightbox hidden" onclick="closeLightbox(event)">
         <button type="button" class="lightbox-close" onclick="closeLightbox(event)">×</button>
         <button type="button" id="lightbox-prev" class="lightbox-nav lightbox-prev hidden" onclick="lightboxNav(-1, event)">‹</button>
-        <img id="lightbox-img" src="" class="lightbox-img" onclick="event.stopPropagation()">
+        <img id="lightbox-img" src="" class="lightbox-img" onclick="event.stopPropagation()" alt="">
         <button type="button" id="lightbox-next" class="lightbox-nav lightbox-next hidden" onclick="lightboxNav(1, event)">›</button>
         <div id="lightbox-counter" class="lightbox-counter"></div>
     </div>
-    <div id="toast" class="toast"><span id="toast-icon">✓</span><span id="toast-msg"></span></div>
+    <div id="toast" class="toast"><span id="toast-msg"></span></div>
 
     <script src="app.js"></script>
 </body>

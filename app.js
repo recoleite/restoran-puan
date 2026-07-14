@@ -1,12 +1,7 @@
 const API = '';
 const TAG_PRESETS = ['İlk buluşma', 'Doğum günü', 'Yıldönümü', 'Özel gün', 'Kutlama'];
 const SPECIAL_TAGS = new Set(TAG_PRESETS);
-const CUISINE_EMOJI = {
-    'italyan': '🍕', 'japon': '🍣', 'çin': '🥡', 'türk': '🥙', 'kebap': '🥙',
-    'burger': '🍔', 'pizza': '🍕', 'kahve': '☕', 'cafe': '☕', 'kafe': '☕',
-    'deniz': '🦐', 'balık': '🐟', 'vegan': '🥗', 'tatlı': '🍰', 'meksika': '🌮',
-    'hint': '🍛', 'fransız': '🥐', 'kore': '🍜', 'fast': '🍟'
-};
+const DEFAULT_SORT = 'date';
 const CATEGORY_LABELS = { food: 'Yemek', service: 'Servis', atmosphere: 'Atmosfer', price: 'Fiyat' };
 
 let cachedNames = [];
@@ -173,9 +168,7 @@ function applySettings() {
     const titleText = coupleName1 && coupleName2
         ? `${coupleName1} & ${coupleName2}`
         : coupleName1 ? `${coupleName1}'in Restoranları` : 'Bizim Restoranlarımız';
-    const subtitleText = coupleName1 && coupleName2
-        ? 'Birlikte keşfettiğimiz lezzetler 💕'
-        : 'Birlikte keşfettiğimiz lezzetler';
+    const subtitleText = 'Birlikte keşfettiğimiz lezzetler';
 
     ['app-title', 'login-title'].forEach(id => {
         const el = document.getElementById(id);
@@ -232,8 +225,8 @@ function openSettingsModal() {
                 <p class="settings-section-title">Yedekleme</p>
                 <p class="settings-hint">Tüm restoranları, anıları ve ayarları indir veya geri yükle.</p>
                 <div class="flex gap-2 mt-2">
-                    <button type="button" onclick="exportBackup()" class="btn-secondary flex-1">📥 Yedek İndir</button>
-                    <button type="button" onclick="triggerBackupImport()" class="btn-secondary flex-1">📤 Yedek Yükle</button>
+                    <button type="button" onclick="exportBackup()" class="btn-secondary flex-1">Yedek İndir</button>
+                    <button type="button" onclick="triggerBackupImport()" class="btn-secondary flex-1">Yedek Yükle</button>
                 </div>
             </div>
             <button onclick="saveSettings()" class="btn-primary w-full">Kaydet</button>
@@ -374,17 +367,18 @@ async function drawShareCard(stats) {
 
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.primary;
-    ctx.font = 'bold 72px "Playfair Display", Georgia, serif';
-    ctx.fillText('🍽️', w / 2, 200);
+    ctx.font = 'italic 72px "Instrument Serif", Georgia, serif';
+    const initials = title.split('&').map(s => s.trim()[0]?.toUpperCase()).filter(Boolean).join(' · ') || 'R';
+    ctx.fillText(initials, w / 2, 200);
 
     ctx.fillStyle = theme.text;
-    ctx.font = 'bold 64px "Playfair Display", Georgia, serif';
+    ctx.font = 'bold 64px "Instrument Serif", Georgia, serif';
     const titleLines = wrapCanvasText(ctx, title, w - 200);
     titleLines.forEach((line, i) => ctx.fillText(line, w / 2, 300 + i * 72));
 
     ctx.fillStyle = theme.muted;
     ctx.font = '500 32px "DM Sans", system-ui, sans-serif';
-    ctx.fillText('Birlikte keşfettiğimiz lezzetler 💕', w / 2, 300 + titleLines.length * 72 + 50);
+    ctx.fillText('Birlikte keşfettiğimiz lezzetler', w / 2, 300 + titleLines.length * 72 + 50);
 
     const avg = stats.avgRating || '—';
     const statsY = 520;
@@ -404,9 +398,9 @@ async function drawShareCard(stats) {
     });
 
     const highlights = [];
-    if (stats.topRestaurant) highlights.push({ icon: '🏆', label: 'En çok gidilen', value: `${stats.topRestaurant.name} (${stats.topRestaurant.visits}x)` });
-    if (stats.topRated) highlights.push({ icon: '⭐', label: 'En yüksek puan', value: `${stats.topRated.name} · ${stats.topRated.rating}★` });
-    if (stats.favoriteCount) highlights.push({ icon: '❤️', label: 'Favoriler', value: `${stats.favoriteCount} restoran` });
+    if (stats.topRestaurant) highlights.push({ label: 'En çok gidilen', value: `${stats.topRestaurant.name} (${stats.topRestaurant.visits}x)` });
+    if (stats.topRated) highlights.push({ label: 'En yüksek puan', value: `${stats.topRated.name} · ${stats.topRated.rating}★` });
+    if (stats.favoriteCount) highlights.push({ label: 'Favoriler', value: `${stats.favoriteCount} restoran` });
 
     let hy = 680;
     highlights.forEach(item => {
@@ -420,7 +414,7 @@ async function drawShareCard(stats) {
         ctx.globalAlpha = 1;
         ctx.font = '600 30px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText(`${item.icon} ${item.label}`, 150, hy + 42);
+        ctx.fillText(item.label, 150, hy + 42);
         ctx.font = 'bold 34px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.text;
         const valLines = wrapCanvasText(ctx, item.value, w - 300);
@@ -465,8 +459,8 @@ async function openShareCardModal() {
             <canvas id="share-card-canvas" class="share-card-canvas"></canvas>
         </div>
         <div class="flex gap-2 mt-4">
-            <button onclick="downloadShareCard()" class="btn-primary flex-1">📥 İndir</button>
-            <button onclick="shareShareCard()" class="btn-secondary flex-1">📤 Paylaş</button>
+            <button onclick="downloadShareCard()" class="btn-primary flex-1">İndir</button>
+            <button onclick="shareShareCard()" class="btn-secondary flex-1">Paylaş</button>
         </div>
     </div>`;
     modal.onclick = e => { if (e.target === modal) closeModal('share-card-modal'); };
@@ -490,7 +484,7 @@ async function shareShareCard() {
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
         const file = new File([blob], `lezzet-gunlugu-${new Date().toISOString().slice(0, 10)}.png`, { type: 'image/png' });
         if (navigator.share && navigator.canShare?.({ files: [file] })) {
-            await navigator.share({ files: [file], title: getCoupleTitle(), text: 'Birlikte keşfettiğimiz lezzetler 💕' });
+            await navigator.share({ files: [file], title: getCoupleTitle(), text: 'Birlikte keşfettiğimiz lezzetler' });
             showToast('Paylaşıldı!');
         } else {
             downloadShareCard();
@@ -520,13 +514,9 @@ function renderStars(rating, filled = 'text-amber-400', empty = 'text-gray-200')
     return Array.from({ length: 5 }, (_, i) => `<span class="${i < rating ? filled : empty}">★</span>`).join('');
 }
 
-function getCuisineEmoji(cuisine) {
-    if (!cuisine) return '🍽️';
-    const lower = cuisine.toLowerCase();
-    for (const [key, emoji] of Object.entries(CUISINE_EMOJI)) {
-        if (lower.includes(key)) return emoji;
-    }
-    return '🍽️';
+function nameInitial(name) {
+    if (!name?.trim()) return '?';
+    return name.trim()[0].toUpperCase();
 }
 
 function getCoupleLabels() {
@@ -554,8 +544,8 @@ function updateRatingLabels() {
 
 function getAgreementBadge(my, partner) {
     const diff = Math.abs(my - partner);
-    if (diff === 0) return '<span class="agreement-badge agreement-match">🤝 Tam uyum</span>';
-    if (diff >= 2) return '<span class="agreement-badge agreement-debate">💬 Tartışmalı</span>';
+    if (diff === 0) return '<span class="agreement-badge agreement-match">Tam uyum</span>';
+    if (diff >= 2) return '<span class="agreement-badge agreement-debate">Tartışmalı</span>';
     return '';
 }
 
@@ -623,7 +613,7 @@ function renderDetailVisits(visits, restaurantId) {
         return `<article class="detail-visit-card ${isSpecial ? 'special' : ''}">
             <div class="detail-visit-date"><span class="day">${parts.day}</span><span class="month">${parts.month}</span></div>
             <div class="detail-visit-body">
-                ${isSpecial ? '<span class="detail-visit-badge">✨ Özel gün</span>' : ''}
+                ${isSpecial ? '<span class="detail-visit-badge">Özel gün</span>' : ''}
                 ${v.notes ? `<p class="detail-visit-note">"${escapeHtml(v.notes)}"</p>` : ''}
                 ${v.dishes?.length ? `<p class="detail-visit-dishes">${v.dishes.map(d => `${escapeHtml(d.name)} ${d.rating}★`).join(' · ')}</p>` : ''}
                 ${renderTags(v.tags, false)}
@@ -663,7 +653,7 @@ function buildDetailModalHtml(r) {
     const galleryKey = `detail-${r.id}`;
     const agreement = getAgreementBadge(r.myRating, r.partnerRating);
     const labels = getCoupleLabels();
-    const emoji = getCuisineEmoji(r.cuisine);
+    const initial = nameInitial(r.name);
     const perfect = Math.round(parseFloat(avg)) >= 5;
     const totalBudget = (r.visits || []).reduce((sum, v) => sum + (Number(v.budget) || 0), 0);
     const mapLink = r.lat && r.lng
@@ -672,7 +662,7 @@ function buildDetailModalHtml(r) {
 
     const hero = cover
         ? `<img src="${cover}" class="detail-hero-img" alt="" onclick="openLightboxGallery('${galleryKey}-all',0)">`
-        : `<div class="detail-hero-placeholder"><span class="detail-hero-emoji">${emoji}</span></div>`;
+        : `<div class="detail-hero-placeholder"><span class="detail-monogram">${initial}</span></div>`;
 
     return `<div class="modal-box detail-modal-box${perfect ? ' detail-perfect' : ''}">
         <div class="detail-hero">
@@ -680,22 +670,22 @@ function buildDetailModalHtml(r) {
             <div class="detail-hero-gradient"></div>
             <div class="detail-hero-top">
                 <button type="button" onclick="closeModal('detail-modal')" class="detail-icon-btn" aria-label="Kapat">×</button>
-                <button type="button" onclick="event.stopPropagation();toggleFavoriteFromDetail('${r.id}', this)" class="detail-icon-btn detail-fav-btn ${r.favorite ? 'active' : ''}" aria-label="Favori">${r.favorite ? '❤️' : '🤍'}</button>
+                <button type="button" onclick="event.stopPropagation();toggleFavoriteFromDetail('${r.id}', this)" class="detail-icon-btn detail-fav-btn ${r.favorite ? 'active' : ''}" aria-label="Favori">♥</button>
             </div>
             <div class="detail-hero-bottom">
                 <div class="detail-hero-score">
                     <span class="detail-hero-score-num">${avg}</span>
                     <span class="detail-hero-score-stars">${renderStars(Math.round(avg), 'text-amber-300', 'text-white/30')}</span>
                 </div>
-                ${photos.length > 1 ? `<span class="detail-hero-photo-count">📸 ${photos.length}</span>` : ''}
+                ${photos.length > 1 ? `<span class="detail-hero-photo-count">${photos.length} foto</span>` : ''}
             </div>
         </div>
         <div class="detail-body">
             <div class="detail-title-block">
                 <h2 class="detail-title">${escapeHtml(r.name)}</h2>
                 <div class="detail-meta">
-                    ${r.cuisine ? `<span class="detail-chip">${emoji} ${escapeHtml(r.cuisine)}</span>` : ''}
-                    ${r.location ? `<span class="detail-chip">📍 ${escapeHtml(r.location)}</span>` : ''}
+                    ${r.cuisine ? `<span class="detail-chip">${escapeHtml(r.cuisine)}</span>` : ''}
+                    ${r.location ? `<span class="detail-chip">${escapeHtml(r.location)}</span>` : ''}
                     ${mapLink ? `<a href="${mapLink}" target="_blank" rel="noopener" class="detail-chip detail-chip-link">Haritada aç</a>` : ''}
                 </div>
                 <div class="detail-stats">
@@ -725,18 +715,17 @@ function buildDetailModalHtml(r) {
             ${renderDetailVisits(r.visits, r.id)}
         </div>
         <div class="detail-actions">
-            <button type="button" onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="detail-action-btn primary"><span>➕</span>Ziyaret</button>
-            <button type="button" onclick="closeModal('detail-modal');openHistoryModal('${r.id}')" class="detail-action-btn"><span>📖</span>Geçmiş</button>
-            <button type="button" onclick="closeModal('detail-modal');openEditModal('${r.id}')" class="detail-action-btn"><span>✏️</span>Düzenle</button>
-            <button type="button" onclick="closeModal('detail-modal');deleteRestaurant('${r.id}')" class="detail-action-btn danger"><span>🗑️</span>Sil</button>
+            <button type="button" onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="detail-action-btn primary">Ziyaret</button>
+            <button type="button" onclick="closeModal('detail-modal');openHistoryModal('${r.id}')" class="detail-action-btn">Geçmiş</button>
+            <button type="button" onclick="closeModal('detail-modal');openEditModal('${r.id}')" class="detail-action-btn">Düzenle</button>
+            <button type="button" onclick="closeModal('detail-modal');deleteRestaurant('${r.id}')" class="detail-action-btn danger">Sil</button>
         </div>
     </div>`;
 }
 
 async function toggleFavoriteFromDetail(id, btn) {
     await fetch(`${API}/restaurants/${id}/favorite`, { method: 'POST' });
-    const active = btn.classList.toggle('active');
-    btn.textContent = active ? '❤️' : '🤍';
+    btn.classList.toggle('active');
     btn.classList.add('pop');
     setTimeout(() => btn.classList.remove('pop'), 500);
     loadRestaurants();
@@ -828,7 +817,7 @@ function renderPhotoSection(photos, skipCover, galleryKey) {
         </button>`;
     }).join('');
     return `<div class="photo-section">
-        <div class="photo-section-label"><span class="photo-section-icon">📸</span> Anılar <span class="photo-count">${photos.length} fotoğraf</span></div>
+        <div class="photo-section-label">Fotoğraflar <span class="photo-count">${photos.length}</span></div>
         <div class="photo-bento ${bentoClass}">${frames}</div>
     </div>`;
 }
@@ -891,12 +880,11 @@ document.addEventListener('keydown', e => {
     if (e.key === 'ArrowRight') lightboxNav(1, { stopPropagation() {} });
 });
 
-function renderEmptyState(icon, title, desc, actionHtml = '') {
+function renderEmptyState(title, desc, actionHtml = '') {
     return `<div class="empty-state">
-        <div class="empty-icon">${icon}</div>
         <h3>${title}</h3>
         <p>${desc}</p>
-        ${actionHtml ? `<div class="mt-4">${actionHtml}</div><div class="empty-arrow">↓</div>` : ''}
+        ${actionHtml ? `<div class="mt-4">${actionHtml}</div>` : ''}
     </div>`;
 }
 
@@ -1015,7 +1003,7 @@ async function geocodeLocation(prefix) {
     if (local) {
         input.dataset.lat = local.lat;
         input.dataset.lng = local.lng;
-        showLocationStatus(prefix, '📍 Google Maps linkinden alındı', 'success');
+        showLocationStatus(prefix, 'Google Maps linkinden alındı', 'success');
         return true;
     }
     showLocationStatus(prefix, 'Aranıyor...', 'loading');
@@ -1029,7 +1017,7 @@ async function geocodeLocation(prefix) {
         if (res.ok && data.lat != null) {
             input.dataset.lat = data.lat;
             input.dataset.lng = data.lng;
-            showLocationStatus(prefix, '📍 Bulundu — haritada görünecek', 'success');
+            showLocationStatus(prefix, 'Bulundu — haritada görünecek', 'success');
             return true;
         }
         delete input.dataset.lat;
@@ -1046,10 +1034,10 @@ function showLocationStatus(prefix, msg, type) {
     const el = document.getElementById(`${prefix}-location-status`);
     if (!el) return;
     el.textContent = msg;
-    el.classList.remove('hidden', 'text-emerald-600', 'text-red-500', 'text-gray-400');
-    if (type === 'success') el.classList.add('text-emerald-600');
-    else if (type === 'error') el.classList.add('text-red-500');
-    else el.classList.add('text-gray-400');
+    el.className = 'field-hint';
+    if (type === 'success') el.classList.add('success');
+    else if (type === 'error') el.classList.add('error');
+    else el.classList.add('loading');
 }
 
 function setLocationCoords(prefix, lat, lng) {
@@ -1057,7 +1045,7 @@ function setLocationCoords(prefix, lat, lng) {
     if (!input || !lat || !lng) return;
     input.dataset.lat = lat;
     input.dataset.lng = lng;
-    showLocationStatus(prefix, '📍 Haritada kayıtlı', 'success');
+    showLocationStatus(prefix, 'Haritada kayıtlı', 'success');
 }
 
 // --- İSİM ÖNERİLERİ ---
@@ -1145,34 +1133,25 @@ function renderDashboard(s) {
         el.innerHTML = '';
         return;
     }
-    const { coupleName1, coupleName2 } = appSettings;
-    const greeting = coupleName1 && coupleName2
-        ? `${coupleName1} & ${coupleName2}`
-        : 'Lezzet günlüğünüz';
+    const highlights = [];
+    if (s.avgRating) highlights.push({ label: 'Ortalama', value: `${s.avgRating}★` });
+    if (s.topRestaurant) highlights.push({ label: 'En çok gidilen', value: `${escapeHtml(s.topRestaurant.name)} · ${s.topRestaurant.visits}×` });
+    if (s.topRated) highlights.push({ label: 'En yüksek puan', value: `${escapeHtml(s.topRated.name)} · ${s.topRated.rating}★` });
+    if (s.monthVisits != null) highlights.push({ label: 'Bu ay', value: `${s.monthVisits} ziyaret` });
+    if (s.topCuisine) highlights.push({ label: 'Favori mutfak', value: `${escapeHtml(s.topCuisine.name)} · ${s.topCuisine.count}×` });
+
     el.innerHTML = `
-        <div class="dash-hero">
-            <div class="dash-hero-copy">
-                <p class="dash-hero-kicker">Hoş geldiniz</p>
-                <h2 class="dash-hero-title font-display">${escapeHtml(greeting)}</h2>
-                <p class="dash-hero-sub">${s.restaurantCount} mekân · ${s.visitCount} anı${s.avgRating ? ` · ortalama ${s.avgRating}★` : ''}</p>
-            </div>
-            <div class="dash-hero-badge">
-                <span class="dash-hero-badge-num">${s.avgRating || '—'}</span>
-                <span class="dash-hero-badge-label">ortalama</span>
-            </div>
+        <div class="dash-summary">
+            <div class="dash-stat"><span class="dash-stat-value">${s.restaurantCount}</span><span class="dash-stat-label">Restoran</span></div>
+            <div class="dash-stat"><span class="dash-stat-value">${s.visitCount}</span><span class="dash-stat-label">Ziyaret</span></div>
+            <div class="dash-stat"><span class="dash-stat-value">${s.favoriteCount}</span><span class="dash-stat-label">Favori</span></div>
+            <div class="dash-stat"><span class="dash-stat-value">${s.wishlistCount || 0}</span><span class="dash-stat-label">İstek</span></div>
         </div>
-        <div class="stats-row">
-            <div class="stat-pill"><div class="stat-num">${s.restaurantCount}</div><div class="stat-label">Restoran</div></div>
-            <div class="stat-pill"><div class="stat-num">${s.visitCount}</div><div class="stat-label">Ziyaret</div></div>
-            <div class="stat-pill"><div class="stat-num">${s.favoriteCount}</div><div class="stat-label">Favori</div></div>
-            <div class="stat-pill"><div class="stat-num">${s.wishlistCount || 0}</div><div class="stat-label">İstek</div></div>
-        </div>
-        <div class="dashboard-grid">
-            <div class="dashboard-card dash-card-gold"><div class="dash-icon">🏆</div><div class="dash-value">${s.topRestaurant ? escapeHtml(s.topRestaurant.name) : '—'}</div><div class="dash-label">En çok gidilen${s.topRestaurant ? ` · ${s.topRestaurant.visits}×` : ''}</div></div>
-            <div class="dashboard-card dash-card-star"><div class="dash-icon">⭐</div><div class="dash-value">${s.topRated ? escapeHtml(s.topRated.name) : '—'}</div><div class="dash-label">En yüksek${s.topRated ? ` · ${s.topRated.rating}★` : ''}</div></div>
-            <div class="dashboard-card dash-card-cal"><div class="dash-icon">📅</div><div class="dash-value">${s.monthVisits}</div><div class="dash-label">Bu ayki ziyaret</div></div>
-            ${s.topCuisine ? `<div class="dashboard-card dash-card-food"><div class="dash-icon">🍽</div><div class="dash-value">${escapeHtml(s.topCuisine.name)}</div><div class="dash-label">Favori mutfak · ${s.topCuisine.count}×</div></div>` : ''}
-        </div>`;
+        ${highlights.length ? `<div class="dash-highlights">${highlights.map(h => `
+            <div class="dash-highlight">
+                <span class="dash-highlight-label">${h.label}</span>
+                <span class="dash-highlight-value">${h.value}</span>
+            </div>`).join('')}</div>` : ''}`;
 }
 
 // --- GÖRÜNÜM ---
@@ -1194,13 +1173,12 @@ function setView(view) {
 
 function createCustomIcon(type) {
     const cls = type === 'wishlist' ? 'custom-marker-wishlist' : 'custom-marker-visited';
-    const emoji = type === 'wishlist' ? '📌' : '🍽';
     return L.divIcon({
         className: '',
-        html: `<div class="${cls}"><span>${emoji}</span></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
+        html: `<div class="${cls}"></div>`,
+        iconSize: [14, 14],
+        iconAnchor: [7, 7],
+        popupAnchor: [0, -10]
     });
 }
 
@@ -1212,7 +1190,7 @@ function buildMapPopup(r, isWishlist = false) {
         <b>${escapeHtml(r.name)}</b><br>
         <span style="color:#6b7280;font-size:12px">${escapeHtml(r.location || '')}</span>
         ${avg ? `<br><span style="color:#f43f5e;font-weight:600">${avg}★</span> · ${r.visitCount} ziyaret` : ''}
-        ${isWishlist ? '<br><span style="color:#8b5cf6;font-size:12px">📌 Gitmek istiyoruz</span>' : ''}
+        ${isWishlist ? '<br><span style="color:#8b5cf6;font-size:12px">İstek listesinde</span>' : ''}
     </div>`;
 }
 
@@ -1263,10 +1241,7 @@ function renderMap() {
 
 // --- LİSTE ---
 async function loadRestaurants() {
-    const sort = document.getElementById('sort-select').value;
-    const favorite = document.getElementById('filter-favorite').checked;
-    const params = new URLSearchParams({ sort });
-    if (favorite) params.set('favorite', 'true');
+    const params = new URLSearchParams({ sort: DEFAULT_SORT });
     const res = await fetch(`${API}/restaurants?${params}`);
     allRestaurants = await res.json();
     renderList(allRestaurants);
@@ -1282,7 +1257,7 @@ function renderVisitHistory(visits, restaurantId) {
         ${sorted.slice(0, 2).map(v => {
             const isSpecial = (v.tags || []).some(t => SPECIAL_TAGS.has(t));
             return `<div class="visit-history-item ${isSpecial ? 'special-memory' : ''}">
-                <div class="text-sm font-medium">${formatDate(v.date)} ${isSpecial ? '✨' : ''}</div>
+                <div class="text-sm font-medium">${formatDate(v.date)}${isSpecial ? ' · Özel' : ''}</div>
                 ${v.notes ? `<p class="text-sm text-gray-600 italic mt-1">"${escapeHtml(v.notes)}"</p>` : ''}
                 ${v.dishes?.length ? `<p class="text-xs text-gray-500 mt-1">${v.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(' · ')}</p>` : ''}
                 ${renderTags(v.tags)}
@@ -1296,34 +1271,34 @@ function renderRestaurantCard(r, index) {
     const avg = avgRating(r.myRating, r.partnerRating);
     const cover = getCoverPhoto(r);
     const photos = getAllPhotos(r);
-    const emoji = getCuisineEmoji(r.cuisine);
+    const initial = nameInitial(r.name);
     const galleryKey = `card-${r.id}`;
     const perfect = Math.round(parseFloat(avg)) >= 5;
     photoGalleries[`${galleryKey}-all`] = photos;
     const perfectClass = perfect ? ' card-perfect' : '';
+    const favClass = r.favorite ? ' active' : '';
 
     if (cover) {
-        return `<div class="card restaurant-card restaurant-card-compact rounded-2xl shadow-sm${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
+        return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
             <div class="card-cover">
                 <img src="${cover}" class="card-cover-img" alt="">
                 <div class="card-cover-overlay"></div>
                 <div class="card-cover-info"><h3>${escapeHtml(r.name)}</h3></div>
-                <button onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover ${r.favorite?'active':''}">${r.favorite?'❤️':'🤍'}</button>
-                ${photos.length > 1 ? `<span class="cover-photo-badge">📸 ${photos.length}</span>` : ''}
-                <div class="cover-rating-badge"><div class="score">${avg}</div><div class="stars text-amber-400">${renderStars(Math.round(avg))}</div></div>
+                <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover${favClass}" aria-label="Favori">♥</button>
+                ${photos.length > 1 ? `<span class="cover-photo-badge">${photos.length} foto</span>` : ''}
+                <div class="cover-rating-badge"><span class="score">${avg}</span><span class="stars">${renderStars(Math.round(avg))}</span></div>
             </div>
-        </div>`;
+        </article>`;
     }
 
-    return `<div class="card restaurant-card restaurant-card-compact rounded-2xl shadow-sm${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
-        <div class="card-compact-placeholder">
-            <button onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-placeholder ${r.favorite?'active':''}">${r.favorite?'❤️':'🤍'}</button>
-            <span class="emoji">${emoji}</span>
+    return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
+        <div class="card-placeholder">
+            <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn${favClass}" aria-label="Favori">♥</button>
+            <span class="card-monogram">${initial}</span>
             <span class="name">${escapeHtml(r.name)}</span>
-            <div class="rating-badge"><div class="text-xl font-bold text-rose-500 leading-none">${avg}</div>
-            <div class="text-amber-400 text-sm">${renderStars(Math.round(avg))}</div></div>
+            <span class="rating-inline">${avg} · ${renderStars(Math.round(avg))}</span>
         </div>
-    </div>`;
+    </article>`;
 }
 
 async function openRestaurantDetail(id) {
@@ -1337,14 +1312,9 @@ async function openRestaurantDetail(id) {
 
 function renderList(restaurants) {
     const list = document.getElementById('restaurant-list');
-    const favorite = document.getElementById('filter-favorite').checked;
 
     if (!restaurants.length) {
-        if (favorite) {
-            list.innerHTML = renderEmptyState('❤️', 'Favori restoran yok', 'Favori filtresini kaldırın veya bir restorana kalp ekleyin');
-        } else {
-            list.innerHTML = renderEmptyState('🍽️', 'Henüz restoran yok', 'İlk buluşma restoranınızı ekleyerek başlayın!', '<button onclick="fabAddRestaurant()" class="btn-primary">İlk Restoranı Ekle</button>');
-        }
+        list.innerHTML = renderEmptyState('Henüz restoran yok', 'İlk restoranınızı ekleyerek başlayın.', '<button onclick="fabAddRestaurant()" class="btn-primary">Restoran ekle</button>');
         return;
     }
     list.innerHTML = restaurants.map((r, i) => renderRestaurantCard(r, i)).join('');
@@ -1360,7 +1330,7 @@ async function loadTimeline() {
 function renderTimeline(events) {
     const list = document.getElementById('timeline-list');
     if (!events.length) {
-        list.innerHTML = renderEmptyState('📖', 'Henüz anı yok', 'Restoran ekleyip ziyaret kaydı oluşturun, anılarınız burada birikecek');
+        list.innerHTML = renderEmptyState('Henüz anı yok', 'Restoran ekleyip ziyaret kaydı oluşturun.');
         return;
     }
     list.innerHTML = events.map(e => {
@@ -1372,9 +1342,9 @@ function renderTimeline(events) {
                 <span class="month">${parts.month}</span>
             </div>
             <div class="timeline-content ${isSpecial ? 'special-glow' : ''}">
-                <p class="font-display font-semibold theme-text">${escapeHtml(e.restaurantName)} ${isSpecial ? '✨' : ''}</p>
+                <p class="font-display font-semibold theme-text">${escapeHtml(e.restaurantName)}${isSpecial ? ' · Özel' : ''}</p>
                 ${e.notes ? `<p class="text-sm italic mt-2 opacity-80">"${escapeHtml(e.notes)}"</p>` : ''}
-                ${e.dishes?.length ? `<p class="text-xs mt-1 opacity-60">🍽 ${e.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
+                ${e.dishes?.length ? `<p class="text-xs mt-1 opacity-60">${e.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
                 ${renderTags(e.tags)}
                 ${e.photos?.length ? renderPhotoStrip(e.photos, `timeline-${e.id}`) : ''}
             </div>
@@ -1393,20 +1363,19 @@ async function loadWishlist() {
 function renderWishlist() {
     const list = document.getElementById('wishlist-list');
     if (!allWishlist.length) {
-        list.innerHTML = renderEmptyState('📌', 'İstek listesi boş', 'Gitmek istediğiniz restoranları buraya ekleyin', '<button onclick="openWishlistAddModal()" class="btn-primary">İlk İsteği Ekle</button>');
+        list.innerHTML = renderEmptyState('İstek listesi boş', 'Gitmek istediğiniz restoranları buraya ekleyin.', '<button onclick="openWishlistAddModal()" class="btn-primary">İstek ekle</button>');
         return;
     }
     list.innerHTML = allWishlist.map(w => `
         <div class="wishlist-card">
-            <div class="wishlist-icon">📌</div>
-            <div class="flex-1 min-w-0">
-                <p class="font-semibold text-gray-800">${escapeHtml(w.name)}</p>
-                <p class="text-sm text-gray-500">${escapeHtml(w.location || '')}</p>
-                ${w.notes ? `<p class="text-xs text-gray-400 mt-1 italic">"${escapeHtml(w.notes)}"</p>` : ''}
+            <div class="wishlist-body">
+                <p class="wishlist-name">${escapeHtml(w.name)}</p>
+                <p class="wishlist-meta">${escapeHtml(w.location || '')}</p>
+                ${w.notes ? `<p class="wishlist-note">"${escapeHtml(w.notes)}"</p>` : ''}
             </div>
-            <div class="flex flex-col gap-1 shrink-0">
-                <button onclick="visitFromWishlist('${w.id}')" class="text-xs bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-100 font-medium">Gittik!</button>
-                <button onclick="deleteWishlistItem('${w.id}')" class="text-xs text-red-400 px-3 py-1 hover:underline">Sil</button>
+            <div class="wishlist-actions">
+                <button type="button" onclick="visitFromWishlist('${w.id}')" class="btn-secondary btn-sm">Gittik</button>
+                <button type="button" onclick="deleteWishlistItem('${w.id}')" class="text-link text-link-danger">Sil</button>
             </div>
         </div>`).join('');
 }
@@ -1528,7 +1497,7 @@ function openRouletteModal() {
         <div class="flex justify-between mb-4"><h2 class="font-display font-semibold theme-text">Bugün Nereye?</h2>
         <button onclick="closeModal('roulette-modal')" class="text-2xl opacity-40">×</button></div>
         <div class="roulette-wrap">
-            <div class="roulette-pointer" aria-hidden="true">▼</div>
+            <div class="roulette-pointer" aria-hidden="true"></div>
             <div id="roulette-wheel" class="roulette-wheel"></div>
         </div>
         <div id="roulette-result" class="roulette-result hidden"></div>
@@ -1609,6 +1578,7 @@ function fabAddRestaurant() {
     const form = document.getElementById('add-form');
     const section = document.getElementById('add-section');
     form.classList.remove('hidden');
+    section?.classList.add('add-panel-open');
     document.getElementById('add-form-toggle').textContent = '−';
     section.scrollIntoView({ behavior: 'smooth' });
     document.getElementById('add-name')?.focus();
@@ -1623,6 +1593,7 @@ async function toggleFavorite(id) {
     await fetch(`${API}/restaurants/${id}/favorite`, { method: 'POST' });
     const btn = document.querySelector(`#card-${id} .fav-btn`);
     if (btn) {
+        btn.classList.toggle('active');
         btn.classList.add('pop');
         setTimeout(() => btn.classList.remove('pop'), 500);
     }
@@ -1695,11 +1666,11 @@ async function openHistoryModal(id) {
             const isSpecial = (v.tags || []).some(t => SPECIAL_TAGS.has(t));
             return `<div class="visit-history-item ${isSpecial ? 'special-memory' : ''}">
                 <div class="flex justify-between items-start">
-                    <p class="font-medium">${formatDate(v.date)} ${isSpecial ? '✨' : ''}</p>
+                    <p class="font-medium">${formatDate(v.date)}${isSpecial ? ' · Özel' : ''}</p>
                     <button onclick="deleteVisit('${id}','${v.id}')" class="text-red-400 text-xs hover:underline">Sil</button>
                 </div>
                 ${v.notes ? `<p class="text-sm italic text-gray-600 mt-1">"${escapeHtml(v.notes)}"</p>` : ''}
-                ${v.dishes?.length ? `<p class="text-xs text-gray-500 mt-1">🍽 ${v.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
+                ${v.dishes?.length ? `<p class="text-xs text-gray-500 mt-1">${v.dishes.map(d=>`${escapeHtml(d.name)} ${d.rating}★`).join(', ')}</p>` : ''}
                 ${renderTags(v.tags)}
                 ${v.photos?.length ? renderPhotoStrip(v.photos, `history-${id}-${v.id}`) : ''}
             </div>`;
@@ -1797,8 +1768,6 @@ function setupUI() {
     setDefaultDate();
     setupNameAutocomplete('add-name', 'add-name-suggest');
 
-    document.getElementById('sort-select').addEventListener('change', loadRestaurants);
-    document.getElementById('filter-favorite').addEventListener('change', loadRestaurants);
     document.getElementById('add-photos').addEventListener('change', async e => {
         const photos = await readFilesAsBase64(e.target.files);
         addPhotoData = [...addPhotoData, ...photos];
