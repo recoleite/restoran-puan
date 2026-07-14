@@ -559,7 +559,7 @@ function getTopDishes(r, limit = 4) {
 }
 
 function renderDetailCategories(categories) {
-    if (!categories) return '';
+    if (!categories || !hasDistinctCategories(categories)) return '';
     const rows = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
         const cat = categories[key];
         if (!cat) return '';
@@ -572,6 +572,62 @@ function renderDetailCategories(categories) {
     }).join('');
     if (!rows.trim()) return '';
     return `<section class="detail-section"><h3 class="detail-section-title">Detaylı puanlar</h3><div class="detail-categories">${rows}</div></section>`;
+}
+
+function hasDistinctCategories(categories) {
+    const avgs = Object.keys(CATEGORY_LABELS).map(key => {
+        const cat = categories[key];
+        if (!cat) return null;
+        return (Number(cat.my) + Number(cat.partner)) / 2;
+    }).filter(v => v != null);
+    return new Set(avgs.map(v => v.toFixed(1))).size > 1;
+}
+
+function renderDetailInsights(r) {
+    const visits = r.visits || [];
+    const photos = getAllPhotos(r, 99);
+    const totalDishes = visits.reduce((sum, v) => sum + (v.dishes?.length || 0), 0);
+    const specialVisits = visits.filter(v => (v.tags || []).some(t => SPECIAL_TAGS.has(t))).length;
+    const allTags = [...new Set(visits.flatMap(v => v.tags || []))];
+    const totalBudget = visits.reduce((sum, v) => sum + (Number(v.budget) || 0), 0);
+    const sorted = [...visits].sort((a, b) => a.date.localeCompare(b.date));
+    const firstVisit = sorted[0]?.date;
+
+    const cards = [];
+    if (photos.length) cards.push({ emoji: '📸', value: photos.length, label: 'fotoğraf' });
+    if (totalDishes) cards.push({ emoji: '🍽', value: totalDishes, label: 'yemek kaydı' });
+    if (specialVisits) cards.push({ emoji: '✨', value: specialVisits, label: 'özel gün' });
+    if (totalBudget > 0) cards.push({ emoji: '💰', value: totalBudget.toLocaleString('tr-TR'), label: '₺ harcama' });
+    if (firstVisit && visits.length > 1) cards.push({ emoji: '🗓', value: formatDate(firstVisit), label: 'ilk ziyaret' });
+
+    if (!cards.length && !allTags.length) {
+        if (!visits.length) {
+            return `<section class="detail-section detail-empty-section">
+                <div class="detail-empty-card">
+                    <span class="detail-empty-icon">📝</span>
+                    <p class="detail-empty-title">Henüz anı yok</p>
+                    <p class="detail-empty-desc">İlk ziyaretini ekleyerek not, fotoğraf ve yemek kaydı tutmaya başlayın.</p>
+                    <button type="button" onclick="closeModal('detail-modal');openVisitModal('${r.id}')" class="detail-empty-btn">+ İlk ziyareti ekle</button>
+                </div>
+            </section>`;
+        }
+        return '';
+    }
+
+    let html = '';
+    if (cards.length) {
+        html += `<div class="detail-insight-grid">${cards.map(c =>
+            `<div class="detail-insight-card">
+                <span class="detail-insight-emoji">${c.emoji}</span>
+                <span class="detail-insight-value">${c.value}</span>
+                <span class="detail-insight-label">${c.label}</span>
+            </div>`
+        ).join('')}</div>`;
+    }
+    if (allTags.length) {
+        html += `<div class="detail-tags-wrap"><p class="detail-tags-label">Etiketler</p>${renderTags(allTags)}</div>`;
+    }
+    return `<section class="detail-section detail-insights"><h3 class="detail-section-title">Özet</h3>${html}</section>`;
 }
 
 function renderDetailDishes(r) {
@@ -693,6 +749,7 @@ function buildDetailModalHtml(r) {
                 </div>
             </div>
             ${r.notes ? `<blockquote class="detail-note">"${escapeHtml(r.notes)}"</blockquote>` : ''}
+            ${renderDetailInsights(r)}
             ${renderDetailCategories(r.categories)}
             ${renderDetailDishes(r)}
             ${renderDetailPhotos(photos, cover, galleryKey)}
