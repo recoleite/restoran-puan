@@ -1294,9 +1294,26 @@ body.auth-pending { visibility: hidden; }
 .settings-section-title { font-weight: 600; font-size: 0.875rem; margin: 0 0 0.15rem; }
 .settings-hint { font-size: 0.75rem; color: var(--text-soft); margin: 0; }
 
-.share-card-modal-box { max-width: 22rem; }
-.share-card-preview { background: var(--surface-2); border-radius: var(--radius); padding: 0.75rem; border: 1px solid var(--border); }
-.share-card-canvas { width: 100%; height: auto; border-radius: var(--radius); display: block; }
+.share-card-modal-box { max-width: min(22rem, 92vw); }
+.share-card-preview {
+    background: var(--surface-2);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    max-height: min(68vh, 38rem);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+}
+.share-card-canvas {
+    width: 100%;
+    max-height: min(64vh, 36rem);
+    height: auto;
+    aspect-ratio: 9 / 16;
+    border-radius: var(--radius);
+    display: block;
+    object-fit: contain;
+}
 
 .lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.92); display: flex; align-items: center; justify-content: center; padding: 2rem; }
 .lightbox.hidden { display: none; }

@@ -1,5 +1,20 @@
 const API = '';
 const APP_URL = '/app';
+const THEME_STORAGE_KEY = 'restoranTheme';
+const ALLOWED_THEMES = [
+    'rose', 'cherry', 'sunset', 'cream', 'lavender', 'ocean', 'sky', 'forest',
+    'dark', 'cherry-dark', 'sunset-dark', 'cream-dark', 'lavender-dark', 'ocean-dark', 'sky-dark', 'forest-dark'
+];
+
+function applyAuthTheme(theme) {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    const pick = theme || stored || 'rose';
+    const safe = ALLOWED_THEMES.includes(pick) ? pick : 'rose';
+    document.documentElement.setAttribute('data-theme', safe);
+    try { localStorage.setItem(THEME_STORAGE_KEY, safe); } catch { /* ignore */ }
+}
+
+applyAuthTheme();
 
 const nativeFetch = window.fetch.bind(window);
 window.fetch = (url, options = {}) => {
@@ -36,6 +51,7 @@ async function initAuthPage() {
         return;
     }
     const data = await meRes.json().catch(() => null);
+    if (data?.settings?.theme) applyAuthTheme(data.settings.theme);
     if (data?.user) redirectToApp();
 }
 
@@ -53,6 +69,7 @@ async function login() {
         return;
     }
     localStorage.setItem('authToken', data.token);
+    if (data.settings?.theme) applyAuthTheme(data.settings.theme);
     redirectToApp();
 }
 
@@ -80,6 +97,7 @@ async function register() {
         return;
     }
     localStorage.setItem('authToken', data.token);
+    if (data.settings?.theme) applyAuthTheme(data.settings.theme);
     redirectToApp();
 }
 

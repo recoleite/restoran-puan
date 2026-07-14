@@ -234,9 +234,17 @@ const APP_THEMES = [
     { id: 'forest-dark', label: 'Orman koyu', swatch: 'theme-swatch-forest-dark', group: 'dark' }
 ];
 const ALLOWED_THEMES = APP_THEMES.map(t => t.id);
+const THEME_STORAGE_KEY = 'restoranTheme';
+
+function persistTheme(theme) {
+    const safe = ALLOWED_THEMES.includes(theme) ? theme : 'rose';
+    try { localStorage.setItem(THEME_STORAGE_KEY, safe); } catch { /* ignore */ }
+}
 
 function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', ALLOWED_THEMES.includes(theme) ? theme : 'rose');
+    const safe = ALLOWED_THEMES.includes(theme) ? theme : 'rose';
+    document.documentElement.setAttribute('data-theme', safe);
+    persistTheme(safe);
 }
 
 function applySettings() {
@@ -376,6 +384,7 @@ async function importBackup(ev) {
 
 // --- PAYLAŞILABİLİR KART ---
 let shareCardMeta = { type: 'summary', filename: '', shareText: '' };
+const SHARE_CARD_SIZE = { w: 1080, h: 1920 }; // Instagram Story 9:16
 
 const SHARE_CARD_THEMES = {
     rose: { bg: ['#fff5f5', '#fecdd3'], primary: '#e11d48', light: '#fff1f2', text: '#1f2937', muted: '#6b7280' },
@@ -466,10 +475,10 @@ function paintShareCardFrame(ctx, w, h, theme) {
     ctx.globalAlpha = 0.35;
     ctx.fillStyle = theme.primary;
     ctx.beginPath();
-    ctx.arc(900, 180, 220, 0, Math.PI * 2);
+    ctx.arc(900, 220, 240, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(120, 1100, 180, 0, Math.PI * 2);
+    ctx.arc(140, h - 280, 200, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
 
@@ -486,32 +495,37 @@ async function drawShareCard(stats) {
     const canvas = document.getElementById('share-card-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const w = 1080;
-    const h = 1350;
+    const w = SHARE_CARD_SIZE.w;
+    const h = SHARE_CARD_SIZE.h;
     canvas.width = w;
     canvas.height = h;
     const theme = SHARE_CARD_THEMES[appSettings.theme] || SHARE_CARD_THEMES.rose;
     const title = getCoupleTitle();
+    const pad = 60;
+    const frameY = pad;
+    const frameH = h - pad * 2;
 
     paintShareCardFrame(ctx, w, h, theme);
 
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.primary;
-    ctx.font = 'italic 72px "Instrument Serif", Georgia, serif';
+    ctx.font = 'italic 80px "Instrument Serif", Georgia, serif';
     const initials = title.split('&').map(s => s.trim()[0]?.toUpperCase()).filter(Boolean).join(' · ') || 'R';
-    ctx.fillText(initials, w / 2, 200);
+    const headerY = frameY + Math.round(frameH * 0.1);
+    ctx.fillText(initials, w / 2, headerY);
 
     ctx.fillStyle = theme.text;
-    ctx.font = 'bold 64px "Instrument Serif", Georgia, serif';
+    ctx.font = 'bold 68px "Instrument Serif", Georgia, serif';
     const titleLines = wrapCanvasText(ctx, title, w - 200);
-    titleLines.forEach((line, i) => ctx.fillText(line, w / 2, 300 + i * 72));
+    const titleY = headerY + 90;
+    titleLines.forEach((line, i) => ctx.fillText(line, w / 2, titleY + i * 76));
 
     ctx.fillStyle = theme.muted;
-    ctx.font = '500 32px "DM Sans", system-ui, sans-serif';
-    ctx.fillText('Birlikte keşfettiğimiz lezzetler', w / 2, 300 + titleLines.length * 72 + 50);
+    ctx.font = '500 34px "DM Sans", system-ui, sans-serif';
+    ctx.fillText('Birlikte keşfettiğimiz lezzetler', w / 2, titleY + titleLines.length * 76 + 56);
 
     const avg = stats.avgRating || '—';
-    const statsY = 520;
+    const statsY = frameY + Math.round(frameH * 0.34);
     const cols = [
         { num: stats.restaurantCount, label: 'Restoran' },
         { num: stats.visitCount, label: 'Ziyaret' },
@@ -520,11 +534,11 @@ async function drawShareCard(stats) {
     cols.forEach((col, i) => {
         const x = 180 + i * 360;
         ctx.fillStyle = theme.primary;
-        ctx.font = 'bold 80px "DM Sans", system-ui, sans-serif';
+        ctx.font = 'bold 88px "DM Sans", system-ui, sans-serif';
         ctx.fillText(`${col.num}${col.suffix || ''}`, x, statsY);
         ctx.fillStyle = theme.muted;
-        ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
-        ctx.fillText(col.label, x, statsY + 44);
+        ctx.font = '500 30px "DM Sans", system-ui, sans-serif';
+        ctx.fillText(col.label, x, statsY + 48);
     });
 
     const highlights = [];
@@ -532,11 +546,11 @@ async function drawShareCard(stats) {
     if (stats.topRated) highlights.push({ label: 'En yüksek puan', value: `${stats.topRated.name} · ${stats.topRated.rating}★` });
     if (stats.favoriteCount) highlights.push({ label: 'Favoriler', value: `${stats.favoriteCount} restoran` });
 
-    let hy = 680;
+    let hy = frameY + Math.round(frameH * 0.48);
     highlights.forEach(item => {
         ctx.textAlign = 'left';
         ctx.fillStyle = theme.light;
-        roundRect(ctx, 120, hy, w - 240, 110, 24);
+        roundRect(ctx, 120, hy, w - 240, 120, 24);
         ctx.fill();
         ctx.strokeStyle = theme.primary;
         ctx.globalAlpha = 0.25;
@@ -544,19 +558,19 @@ async function drawShareCard(stats) {
         ctx.globalAlpha = 1;
         ctx.font = '600 30px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText(item.label, 150, hy + 42);
-        ctx.font = 'bold 34px "DM Sans", system-ui, sans-serif';
+        ctx.fillText(item.label, 150, hy + 44);
+        ctx.font = 'bold 36px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.text;
         const valLines = wrapCanvasText(ctx, item.value, w - 300);
-        valLines.slice(0, 2).forEach((line, li) => ctx.fillText(line, 150, hy + 82 + li * 38));
-        hy += 130;
+        valLines.slice(0, 2).forEach((line, li) => ctx.fillText(line, 150, hy + 86 + li * 40));
+        hy += 145;
     });
 
     ctx.textAlign = 'center';
     ctx.fillStyle = theme.muted;
-    ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
+    ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
     const dateStr = new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-    ctx.fillText(`Lezzet günlüğü · ${dateStr}`, w / 2, h - 120);
+    ctx.fillText(`Lezzet günlüğü · ${dateStr}`, w / 2, h - pad - 36);
 }
 
 async function drawRestaurantShareCard(r) {
@@ -564,8 +578,8 @@ async function drawRestaurantShareCard(r) {
     const canvas = document.getElementById('share-card-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const w = 1080;
-    const h = 1350;
+    const w = SHARE_CARD_SIZE.w;
+    const h = SHARE_CARD_SIZE.h;
     canvas.width = w;
     canvas.height = h;
     const theme = SHARE_CARD_THEMES[appSettings.theme] || SHARE_CARD_THEMES.rose;
@@ -584,7 +598,7 @@ async function drawRestaurantShareCard(r) {
     const frameH = h - pad * 2;
     const innerX = frameX + 48;
     const innerW = frameW - 96;
-    const footerY = frameY + frameH - 52;
+    const footerY = frameY + frameH - 72;
 
     const catEntries = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
         const cat = r.categories?.[key];
@@ -597,7 +611,7 @@ async function drawRestaurantShareCard(r) {
     paintShareCardFrame(ctx, w, h, theme);
 
     const heroH = img
-        ? Math.min(compact ? 380 : 420, Math.round(frameH * (compact ? 0.3 : 0.34)))
+        ? Math.min(compact ? 560 : 640, Math.round(frameH * (compact ? 0.36 : 0.4)))
         : 0;
 
     if (img) {
@@ -783,7 +797,7 @@ function openShareCardModalShell(title, subtitle) {
             <h2 class="font-display font-semibold theme-text">${escapeHtml(title)}</h2>
             <button onclick="closeModal('share-card-modal')" class="text-2xl opacity-40">×</button>
         </div>
-        <p class="text-sm opacity-70 mb-4">${escapeHtml(subtitle)}</p>
+        <p class="text-sm opacity-70 mb-4">${escapeHtml(subtitle)} · 9:16 story</p>
         <div class="share-card-preview">
             <canvas id="share-card-canvas" class="share-card-canvas"></canvas>
         </div>
@@ -809,7 +823,7 @@ async function openShareCardModal() {
         filename: `lezzet-gunlugu-${date}.png`,
         shareText: 'Birlikte keşfettiğimiz lezzetler'
     };
-    openShareCardModalShell('Paylaşılabilir Kart', 'Story veya gönderi olarak paylaşabilirsin');
+    openShareCardModalShell('Paylaşılabilir Kart', 'Story veya gönderi olarak paylaş');
     await drawShareCard(stats);
 }
 
