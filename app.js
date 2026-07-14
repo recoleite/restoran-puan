@@ -586,56 +586,73 @@ async function drawRestaurantShareCard(r) {
     const innerW = frameW - 96;
     const footerY = frameY + frameH - 52;
 
-    paintShareCardFrame(ctx, w, h, theme);
-
-    const heroH = img ? Math.min(500, Math.round(frameH * 0.4)) : 0;
-
-    if (img) {
-        ctx.save();
-        roundRect(ctx, frameX, frameY, frameW, frameH, 48);
-        ctx.clip();
-        drawCanvasCoverImage(ctx, img, frameX, frameY, frameW, heroH);
-        const overlay = ctx.createLinearGradient(0, frameY + heroH - 190, 0, frameY + heroH + 20);
-        overlay.addColorStop(0, 'rgba(0,0,0,0)');
-        overlay.addColorStop(1, 'rgba(0,0,0,0.78)');
-        ctx.fillStyle = overlay;
-        ctx.fillRect(frameX, frameY + heroH - 190, frameW, 210);
-        ctx.restore();
-        ctx.strokeStyle = theme.primary;
-        ctx.lineWidth = 4;
-        roundRect(ctx, frameX, frameY, frameW, frameH, 48);
-        ctx.stroke();
-
-        ctx.textAlign = 'left';
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 62px "Instrument Serif", Georgia, serif';
-        wrapCanvasText(ctx, r.name, innerW).slice(0, 2).forEach((line, i) => {
-            ctx.fillText(line, innerX, frameY + heroH - 58 + i * 68);
-        });
-    }
-
     const catEntries = Object.entries(CATEGORY_LABELS).map(([key, label]) => {
         const cat = r.categories?.[key];
         if (!cat) return null;
         return { label, value: avgRating(cat.my, cat.partner) };
     }).filter(Boolean);
+    const hasNotes = Boolean(r.notes?.trim());
+    const compact = hasNotes || catEntries.length > 0;
 
-    ctx.font = 'bold 62px "Instrument Serif", Georgia, serif';
+    paintShareCardFrame(ctx, w, h, theme);
+
+    const heroH = img
+        ? Math.min(compact ? 380 : 420, Math.round(frameH * (compact ? 0.3 : 0.34)))
+        : 0;
+
+    if (img) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(frameX + 48, frameY);
+        ctx.lineTo(frameX + frameW - 48, frameY);
+        ctx.quadraticCurveTo(frameX + frameW, frameY, frameX + frameW, frameY + 48);
+        ctx.lineTo(frameX + frameW, frameY + heroH);
+        ctx.lineTo(frameX, frameY + heroH);
+        ctx.lineTo(frameX, frameY + 48);
+        ctx.quadraticCurveTo(frameX, frameY, frameX + 48, frameY);
+        ctx.closePath();
+        ctx.clip();
+        drawCanvasCoverImage(ctx, img, frameX, frameY, frameW, heroH);
+        const overlay = ctx.createLinearGradient(0, frameY + heroH - 90, 0, frameY + heroH);
+        overlay.addColorStop(0, 'rgba(0,0,0,0)');
+        overlay.addColorStop(1, 'rgba(0,0,0,0.35)');
+        ctx.fillStyle = overlay;
+        ctx.fillRect(frameX, frameY + heroH - 90, frameW, 90);
+        ctx.restore();
+
+        ctx.fillStyle = theme.light;
+        ctx.fillRect(frameX + 3, frameY + heroH, frameW - 6, frameH - heroH - 3);
+
+        ctx.strokeStyle = theme.primary;
+        ctx.globalAlpha = 0.12;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(innerX, frameY + heroH + 16);
+        ctx.lineTo(innerX + innerW, frameY + heroH + 16);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    }
+
+    ctx.strokeStyle = theme.primary;
+    ctx.lineWidth = 4;
+    roundRect(ctx, frameX, frameY, frameW, frameH, 48);
+    ctx.stroke();
+
+    ctx.font = 'bold 58px "Instrument Serif", Georgia, serif';
     const nameLineCount = Math.min(2, wrapCanvasText(ctx, r.name, innerW).length);
 
-    let blockH = 0;
-    if (!img) blockH += 108;
-    blockH += nameLineCount * 68 + (img ? 0 : 16);
-    if (visitDate) blockH += 40;
-    if (cuisineLine) blockH += 36;
-    if (locationHint) blockH += 36;
-    blockH += 118 + 148;
-    if (catEntries.length) blockH += 88;
-    if (r.notes?.trim()) blockH += 118;
-    if ((r.visitCount || 0) > 1) blockH += 32;
+    let blockH = img ? 0 : 108;
+    blockH += nameLineCount * 64 + 12;
+    if (visitDate) blockH += 36;
+    if (cuisineLine) blockH += 32;
+    if (locationHint) blockH += 32;
+    blockH += compact ? 108 + 132 : 118 + 148;
+    if (catEntries.length) blockH += compact ? 76 : 88;
+    if (hasNotes) blockH += compact ? 96 : 118;
+    if ((r.visitCount || 0) > 1) blockH += 28;
 
     const contentAreaTop = img ? frameY + heroH + 36 : frameY + 48;
-    const contentAreaBottom = footerY - 36;
+    const contentAreaBottom = footerY - 32;
     let y = img
         ? contentAreaTop
         : contentAreaTop + Math.max(0, (contentAreaBottom - contentAreaTop - blockH) / 2);
@@ -660,80 +677,77 @@ async function drawRestaurantShareCard(r) {
     }
 
     ctx.textAlign = 'center';
-    if (!img) {
-        ctx.fillStyle = theme.text;
-        ctx.font = 'bold 62px "Instrument Serif", Georgia, serif';
-        wrapCanvasText(ctx, r.name, innerW).slice(0, 2).forEach((line, i) => {
-            ctx.fillText(line, w / 2, y + 52 + i * 68);
-        });
-        y += nameLineCount * 68 + 20;
-    } else {
-        y += 8;
-    }
+    ctx.fillStyle = theme.text;
+    ctx.font = 'bold 58px "Instrument Serif", Georgia, serif';
+    wrapCanvasText(ctx, r.name, innerW).slice(0, 2).forEach((line, i) => {
+        ctx.fillText(line, w / 2, y + 50 + i * 64);
+    });
+    y += nameLineCount * 64 + 16;
 
-    ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
+    ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
     if (visitDate) {
-        ctx.fillText(visitDate, w / 2, y + 28);
-        y += 40;
+        ctx.fillText(visitDate, w / 2, y + 24);
+        y += 36;
     }
     if (cuisineLine) {
         wrapCanvasText(ctx, cuisineLine, innerW).slice(0, 1).forEach(line => {
-            ctx.fillText(line, w / 2, y + 26);
+            ctx.fillText(line, w / 2, y + 24);
         });
-        y += 36;
+        y += 32;
     }
     if (locationHint) {
         wrapCanvasText(ctx, locationHint, innerW).slice(0, 1).forEach(line => {
-            ctx.fillText(line, w / 2, y + 26);
+            ctx.fillText(line, w / 2, y + 24);
         });
-        y += 36;
+        y += 32;
     }
 
-    y += 12;
+    y += 8;
     ctx.fillStyle = theme.primary;
-    ctx.font = 'bold 88px "DM Sans", system-ui, sans-serif';
-    ctx.fillText(`${avg} ★`, w / 2, y + 72);
-    ctx.font = '500 32px "DM Sans", system-ui, sans-serif';
+    ctx.font = `bold ${compact ? 76 : 88}px "DM Sans", system-ui, sans-serif`;
+    ctx.fillText(`${avg} ★`, w / 2, y + 64);
+    ctx.font = '500 28px "DM Sans", system-ui, sans-serif';
     ctx.fillStyle = theme.muted;
-    ctx.fillText(canvasStarString(avg), w / 2, y + 112);
-    y += 130;
+    ctx.fillText(canvasStarString(avg), w / 2, y + 98);
+    y += compact ? 108 : 130;
 
+    const boxH = compact ? 102 : 118;
     const ratingY = y;
     [{ label: labels.mine, value: r.myRating }, { label: labels.partner, value: r.partnerRating }].forEach((col, i) => {
         const x = i === 0 ? w / 2 - 200 : w / 2 + 200;
         ctx.fillStyle = theme.light;
-        roundRect(ctx, x - 165, ratingY, 330, 118, 22);
+        roundRect(ctx, x - 165, ratingY, 330, boxH, 22);
         ctx.fill();
         ctx.strokeStyle = theme.primary;
         ctx.globalAlpha = 0.22;
         ctx.stroke();
         ctx.globalAlpha = 1;
         ctx.textAlign = 'center';
-        ctx.font = '600 26px "DM Sans", system-ui, sans-serif';
+        ctx.font = '600 24px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText(col.label, x, ratingY + 40);
-        ctx.font = 'bold 46px "DM Sans", system-ui, sans-serif';
+        ctx.fillText(col.label, x, ratingY + 36);
+        ctx.font = 'bold 42px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.text;
-        ctx.fillText(`${col.value} ★`, x, ratingY + 92);
+        ctx.fillText(`${col.value} ★`, x, ratingY + 82);
     });
-    y = ratingY + 148;
+    y = ratingY + boxH + 28;
 
     if (catEntries.length) {
         ctx.textAlign = 'center';
-        ctx.font = '600 24px "DM Sans", system-ui, sans-serif';
+        ctx.font = '600 22px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText('Detay puanlar', w / 2, y + 24);
+        ctx.fillText('Detay puanlar', w / 2, y + 20);
         const catText = catEntries.map(c => `${c.label} ${c.value}`).join('   ·   ');
-        ctx.font = '500 26px "DM Sans", system-ui, sans-serif';
+        ctx.font = '500 24px "DM Sans", system-ui, sans-serif';
         wrapCanvasText(ctx, catText, innerW).slice(0, 2).forEach((line, i) => {
-            ctx.fillText(line, w / 2, y + 62 + i * 32);
+            ctx.fillText(line, w / 2, y + 54 + i * 28);
         });
-        y += catEntries.length ? 88 : 0;
+        y += compact ? 76 : 88;
     }
 
-    if (r.notes?.trim()) {
-        const noteH = 100;
+    if (hasNotes) {
+        const noteH = compact ? 88 : 100;
         ctx.fillStyle = theme.light;
         roundRect(ctx, innerX, y, innerW, noteH, 18);
         ctx.fill();
@@ -741,18 +755,18 @@ async function drawRestaurantShareCard(r) {
         ctx.globalAlpha = 0.2;
         ctx.stroke();
         ctx.globalAlpha = 1;
-        ctx.font = 'italic 28px "Cormorant Garamond", Georgia, serif';
+        ctx.font = 'italic 26px "Cormorant Garamond", Georgia, serif';
         ctx.fillStyle = theme.text;
         wrapCanvasText(ctx, `"${r.notes.trim()}"`, innerW - 40).slice(0, 2).forEach((line, i) => {
-            ctx.fillText(line, w / 2, y + 44 + i * 34);
+            ctx.fillText(line, w / 2, y + 38 + i * 30);
         });
-        y += noteH + 16;
+        y += noteH + 12;
     }
 
     if ((r.visitCount || 0) > 1) {
-        ctx.font = '500 24px "DM Sans", system-ui, sans-serif';
+        ctx.font = '500 22px "DM Sans", system-ui, sans-serif';
         ctx.fillStyle = theme.muted;
-        ctx.fillText(`${r.visitCount} ziyaret`, w / 2, Math.min(y + 24, footerY - 20));
+        ctx.fillText(`${r.visitCount} ziyaret`, w / 2, Math.min(y + 20, footerY - 18));
     }
 
     ctx.textAlign = 'center';
