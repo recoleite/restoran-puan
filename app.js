@@ -904,11 +904,11 @@ function categoriesFromRatings(my, partner) {
 function addDishRow(prefix, name = '', rating = 5) {
     const container = document.getElementById(`${prefix}-dishes`);
     const row = document.createElement('div');
-    row.className = 'flex gap-2 items-center dish-row';
+    row.className = 'dish-row';
     row.innerHTML = `
-        <input type="text" class="input dish-name flex-1" placeholder="Yemek adı" value="${escapeHtml(name)}">
-        <select class="input dish-rating w-20 text-sm py-1">${[1,2,3,4,5].map(n=>`<option value="${n}" ${n===rating?'selected':''}>${n}★</option>`).join('')}</select>
-        <button type="button" onclick="this.parentElement.remove()" class="text-red-400 text-lg">×</button>`;
+        <input type="text" class="input dish-name" placeholder="Yemek adı" value="${escapeHtml(name)}">
+        <select class="input dish-rating">${[1,2,3,4,5].map(n=>`<option value="${n}" ${n===rating?'selected':''}>${n}★</option>`).join('')}</select>
+        <button type="button" onclick="this.parentElement.remove()" class="dish-remove" aria-label="Kaldır">×</button>`;
     container.appendChild(row);
 }
 

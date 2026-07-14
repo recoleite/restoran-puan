@@ -245,6 +245,13 @@ body {
 .checkbox-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--text-muted); cursor: pointer; }
 .checkbox-row input { accent-color: var(--accent); }
 
+.dish-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.dish-row { display: flex; align-items: center; gap: 0.5rem; width: 100%; }
+.dish-row .dish-name { flex: 1 1 0; min-width: 0; width: auto; }
+.dish-rating { flex: 0 0 4.25rem; width: 4.25rem; min-width: 4.25rem; padding: 0.55rem 0.35rem; font-size: 0.85rem; text-align: center; }
+.dish-remove { flex: 0 0 2rem; width: 2rem; height: 2rem; border: none; border-radius: 50%; background: var(--surface-2); color: var(--text-soft); font-size: 1.1rem; line-height: 1; cursor: pointer; transition: background 0.15s, color 0.15s; }
+.dish-remove:hover { background: #fee2e2; color: #dc2626; }
+
 /* ===== RESTAURANT GRID ===== */
 .restaurant-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.85rem; }
 .restaurant-card { overflow: hidden; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); cursor: pointer; transition: box-shadow 0.2s, transform 0.2s, border-color 0.2s; animation: fadeUp 0.35s ease both; box-shadow: 0 4px 14px var(--shadow); }
