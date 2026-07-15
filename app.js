@@ -2176,6 +2176,12 @@ function getChatAuthorKey() {
 function setChatAuthorKey(key) {
     localStorage.setItem(CHAT_AUTHOR_KEY, key === '2' ? '2' : '1');
     renderChatAuthorToggle();
+    loadCoupleInfo();
+    const box = document.getElementById('chat-messages');
+    if (box?.children.length) {
+        chatLastTimestamp = '';
+        loadChatMessages({ full: true });
+    }
 }
 
 function renderChatAuthorToggle() {
@@ -2256,18 +2262,28 @@ async function loadCoupleInfo() {
     const info = await res.json();
     const banner = document.getElementById('chat-link-banner');
     if (!banner) return;
+
+    const labels = getCoupleLabels();
+    const activeLabel = getChatAuthorKey() === '2' ? labels.partner : labels.mine;
+
     if (info.isLinked) {
-        banner.classList.add('hidden');
-        banner.innerHTML = '';
+        banner.innerHTML = `<p class="chat-hint-text">Şu an <strong>${escapeHtml(activeLabel)}</strong> olarak yazıyorsunuz. Mesajlar ortak sohbette görünür.</p>`;
         return;
     }
-    banner.classList.remove('hidden');
+
     banner.innerHTML = `
-        <p class="chat-link-text">Partneriniz farklı cihazdan giriyorsa paylaşım kodunuz: <strong>${escapeHtml(info.shareCode)}</strong></p>
-        <div class="chat-link-form">
-            <input type="text" id="chat-link-code" class="input" placeholder="Partner kodunu gir" maxlength="8" autocomplete="off">
-            <button type="button" id="chat-link-btn" class="btn-secondary btn-sm">Bağlan</button>
-        </div>`;
+        <p class="chat-hint-text">
+            Aynı hesapta sohbet: sağ üstten <strong>${escapeHtml(labels.mine)}</strong> veya <strong>${escapeHtml(labels.partner)}</strong> seçin, mesaj yazın.
+            Şu an <strong>${escapeHtml(activeLabel)}</strong> olarak yazıyorsunuz.
+        </p>
+        <details class="chat-link-details">
+            <summary>Farklı telefon / farklı hesap mı?</summary>
+            <p class="chat-link-text">Aynı hesaba iki telefondan giriyorsanız kod gerekmez. Farklı hesaplar için paylaşım kodu: <strong>${escapeHtml(info.shareCode)}</strong></p>
+            <div class="chat-link-form">
+                <input type="text" id="chat-link-code" class="input" placeholder="Partner kodunu gir" maxlength="8" autocomplete="off">
+                <button type="button" id="chat-link-btn" class="btn-secondary btn-sm">Bağlan</button>
+            </div>
+        </details>`;
     document.getElementById('chat-link-btn')?.addEventListener('click', linkCouplePartner);
 }
 
