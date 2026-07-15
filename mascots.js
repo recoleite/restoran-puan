@@ -1,5 +1,5 @@
 /* Lezzet arkadaşı — duygu durumlu maskot görselleri */
-const MASCOT_ASSET_VERSION = '1.8.1';
+const MASCOT_ASSET_VERSION = '1.8.2';
 
 const MASCOT_MOODS = ['neutral', 'happy', 'excited', 'sad', 'pout'];
 
@@ -52,13 +52,10 @@ function renderMascotSvg(characterId, { preview = false, mood = 'neutral' } = {}
         </div>`;
     }
 
-    const imgs = MASCOT_MOODS.map(m => {
-        const active = m === activeMood ? ' active' : '';
-        return `<img class="mascot-img mascot-img-${m}${active}" data-mood="${m}" src="${getMascotAssetUrl(id, m)}" alt="" draggable="false"/>`;
-    }).join('');
-
     return `<div class="mascot-sprite">
-        <div class="mascot-img-stack">${imgs}</div>
+        <div class="mascot-img-stack">
+            <img class="mascot-img mascot-img-${activeMood} active" data-mood="${activeMood}" src="${getMascotAssetUrl(id, activeMood)}" alt="" draggable="false"/>
+        </div>
         ${mascotFxSvg()}
     </div>`;
 }
@@ -81,28 +78,42 @@ function setMascotMoodVisual(el, mood, { animate = false } = {}) {
     const stack = el.querySelector('.mascot-img-stack');
     if (!stack) return;
 
-    const current = stack.querySelector('.mascot-img.active');
-    const next = stack.querySelector(`.mascot-img-${mood}`);
-    if (!next || current === next) return;
+    const current = stack.querySelector('.mascot-img.active') || stack.querySelector('.mascot-img');
+    if (current?.dataset.mood === mood) return;
 
+    const charId = el.dataset.character || 'bear';
+    const nextSrc = getMascotAssetUrl(charId, mood);
     const emotional = mood === 'sad' || mood === 'pout';
     const doAnimate = animate || (emotional && current);
 
-    if (doAnimate) {
-        el.classList.remove('mascot-mood-shift');
-        void el.offsetWidth;
-        el.classList.add('mascot-mood-shift');
-        clearTimeout(mascotMoodShiftTimer);
-        mascotMoodShiftTimer = setTimeout(() => {
-            el.classList.remove('mascot-mood-shift');
-            stack.querySelectorAll('.mascot-img').forEach(img => img.classList.remove('entering', 'leaving'));
-        }, emotional ? 650 : 520);
+    if (!current || !doAnimate) {
+        stack.innerHTML = `<img class="mascot-img mascot-img-${mood} active" data-mood="${mood}" src="${nextSrc}" alt="" draggable="false"/>`;
+        return;
     }
 
-    stack.querySelectorAll('.mascot-img').forEach(img => img.classList.remove('active', 'entering', 'leaving'));
-    if (doAnimate && current) {
-        current.classList.add('leaving');
-        next.classList.add('entering');
-    }
-    next.classList.add('active');
+    const leaving = current;
+    leaving.classList.remove('active');
+    leaving.classList.add('leaving');
+
+    const next = document.createElement('img');
+    next.className = `mascot-img mascot-img-${mood} entering`;
+    next.dataset.mood = mood;
+    next.src = nextSrc;
+    next.alt = '';
+    next.draggable = false;
+    stack.appendChild(next);
+
+    el.classList.remove('mascot-mood-shift');
+    void el.offsetWidth;
+    el.classList.add('mascot-mood-shift');
+
+    requestAnimationFrame(() => next.classList.add('active'));
+
+    clearTimeout(mascotMoodShiftTimer);
+    mascotMoodShiftTimer = setTimeout(() => {
+        leaving.remove();
+        next.classList.remove('entering', 'leaving');
+        next.classList.add('active');
+        el.classList.remove('mascot-mood-shift');
+    }, emotional ? 650 : 520);
 }
