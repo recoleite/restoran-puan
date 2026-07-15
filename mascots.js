@@ -1,5 +1,7 @@
-/* Lezzet arkadaşı — illüstrasyon maskotlar */
-const MASCOT_ASSET_VERSION = '1.6.1';
+/* Lezzet arkadaşı — duygu durumlu maskot görselleri */
+const MASCOT_ASSET_VERSION = '1.8.0';
+
+const MASCOT_MOODS = ['neutral', 'happy', 'excited', 'sad', 'pout'];
 
 const MASCOT_CHARACTER_LIST = [
     { id: 'bear', label: 'Ayıcık' },
@@ -9,6 +11,12 @@ const MASCOT_CHARACTER_LIST = [
     { id: 'fox', label: 'Tilki' },
     { id: 'rabbit', label: 'Tavşan' }
 ];
+
+function getMascotAssetUrl(characterId, mood = 'neutral') {
+    const id = MASCOT_CHARACTER_LIST.some(c => c.id === characterId) ? characterId : 'bear';
+    const m = MASCOT_MOODS.includes(mood) ? mood : 'neutral';
+    return `/mascots/${id}-${m}.png?v=${MASCOT_ASSET_VERSION}`;
+}
 
 function mascotFxSvg() {
     return `
@@ -33,15 +41,68 @@ function mascotFxSvg() {
     `;
 }
 
-function renderMascotSvg(characterId, { preview = false } = {}) {
+function renderMascotSvg(characterId, { preview = false, mood = 'neutral' } = {}) {
     const id = MASCOT_CHARACTER_LIST.some(c => c.id === characterId) ? characterId : 'bear';
     const previewClass = preview ? ' mascot-sprite-preview' : '';
-    return `<div class="mascot-sprite${previewClass}">
-        <img class="mascot-img" src="/mascots/${id}.png?v=${MASCOT_ASSET_VERSION}" alt="" draggable="false"/>
+    const activeMood = preview ? 'happy' : (MASCOT_MOODS.includes(mood) ? mood : 'neutral');
+
+    if (preview) {
+        return `<div class="mascot-sprite${previewClass}">
+            <img class="mascot-img active" src="${getMascotAssetUrl(id, 'happy')}" alt="" draggable="false"/>
+        </div>`;
+    }
+
+    const imgs = MASCOT_MOODS.map(m => {
+        const active = m === activeMood ? ' active' : '';
+        return `<img class="mascot-img mascot-img-${m}${active}" data-mood="${m}" src="${getMascotAssetUrl(id, m)}" alt="" draggable="false"/>`;
+    }).join('');
+
+    return `<div class="mascot-sprite">
+        <div class="mascot-img-stack">${imgs}</div>
         ${mascotFxSvg()}
     </div>`;
 }
 
 function getMascotCharacter(id) {
     return MASCOT_CHARACTER_LIST.find(c => c.id === id) || MASCOT_CHARACTER_LIST[0];
+}
+
+function preloadMascotImages(characterId) {
+    MASCOT_MOODS.forEach(m => {
+        const img = new Image();
+        img.src = getMascotAssetUrl(characterId, m);
+    });
+}
+
+let mascotMoodShiftTimer = null;
+
+function setMascotMoodVisual(el, mood, { animate = false } = {}) {
+    if (!el || !MASCOT_MOODS.includes(mood)) return;
+    const stack = el.querySelector('.mascot-img-stack');
+    if (!stack) return;
+
+    const current = stack.querySelector('.mascot-img.active');
+    const next = stack.querySelector(`.mascot-img-${mood}`);
+    if (!next || current === next) return;
+
+    const emotional = mood === 'sad' || mood === 'pout';
+    const doAnimate = animate || (emotional && current);
+
+    if (doAnimate) {
+        el.classList.remove('mascot-mood-shift');
+        void el.offsetWidth;
+        el.classList.add('mascot-mood-shift');
+        clearTimeout(mascotMoodShiftTimer);
+        mascotMoodShiftTimer = setTimeout(() => {
+            el.classList.remove('mascot-mood-shift');
+            stack.querySelectorAll('.mascot-img').forEach(img => img.classList.remove('entering', 'leaving'));
+        }, emotional ? 650 : 520);
+    }
+
+    stack.querySelectorAll('.mascot-img').forEach(img => img.classList.remove('active', 'entering', 'leaving'));
+    if (doAnimate && current) {
+        current.classList.add('leaving');
+        next.classList.add('entering');
+    }
+    next.classList.add('active');
 }

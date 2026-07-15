@@ -276,7 +276,10 @@ function applyMascotCharacter() {
     appSettings.mascotCharacter = character.id;
     el.dataset.character = character.id;
     const art = el.querySelector('.mascot-art');
-    if (art) art.innerHTML = renderMascotSvg(character.id);
+    const mood = el.dataset.mood || 'neutral';
+    if (art) art.innerHTML = renderMascotSvg(character.id, { mood });
+    preloadMascotImages(character.id);
+    setMascotMoodVisual(el, mood);
     el.setAttribute('aria-label', `${character.label} — lezzet arkadaşı`);
 }
 
@@ -2781,10 +2784,11 @@ function updateMascotMood(opts = {}) {
         restaurant: activeRestaurant || undefined,
         starValue: opts.starValue
     });
+    const moodChanged = mascotLastMood !== null && mascotLastMood !== state.mood;
     el.dataset.mood = state.mood;
     el.dataset.message = state.message;
+    setMascotMoodVisual(el, state.mood, { animate: opts.animate || moodChanged });
 
-    const moodChanged = mascotLastMood !== null && mascotLastMood !== state.mood;
     if (opts.animate || moodChanged) triggerMascotReaction(el);
 
     if ((opts.showBubble || opts.forceBubble) && state.message) {
