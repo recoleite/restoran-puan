@@ -8,7 +8,7 @@ const CATEGORY_LABELS = { food: 'Yemek', service: 'Servis', atmosphere: 'Atmosfe
 let cachedNames = [];
 let allRestaurants = [];
 let allWishlist = [];
-let appSettings = { coupleName1: '', coupleName2: '', theme: 'rose' };
+let appSettings = { coupleName1: '', coupleName2: '', theme: 'rose', mascotCharacter: 'bear' };
 let addPhotoData = [];
 let addCoverPhoto = null;
 let visitPhotoData = [];
@@ -251,6 +251,7 @@ function applyTheme(theme) {
 function applySettings() {
     const { coupleName1, coupleName2, theme } = appSettings;
     applyTheme(theme);
+    applyMascotCharacter();
 
     const titleText = coupleName1 && coupleName2
         ? `${coupleName1} & ${coupleName2}`
@@ -266,6 +267,76 @@ function applySettings() {
 }
 
 let selectedTheme = 'rose';
+let selectedMascotCharacter = 'bear';
+
+const MASCOT_CHARACTERS = [
+    {
+        id: 'bear',
+        label: 'Ayıcık',
+        preview: '🐻',
+        moods: { excited: '🤩', happy: '🐻', neutral: '🐻', sad: '😢', pout: '😤' }
+    },
+    {
+        id: 'cat',
+        label: 'Kedi',
+        preview: '🐱',
+        moods: { excited: '😸', happy: '😺', neutral: '🐱', sad: '😿', pout: '🙀' }
+    },
+    {
+        id: 'dog',
+        label: 'Köpek',
+        preview: '🐶',
+        moods: { excited: '🐶', happy: '🐕', neutral: '🐶', sad: '🥺', pout: '😠' }
+    },
+    {
+        id: 'penguin',
+        label: 'Penguen',
+        preview: '🐧',
+        moods: { excited: '🐧', happy: '🐧', neutral: '🐧', sad: '😔', pout: '😤' }
+    },
+    {
+        id: 'fox',
+        label: 'Tilki',
+        preview: '🦊',
+        moods: { excited: '🦊', happy: '🦊', neutral: '🦊', sad: '😞', pout: '😾' }
+    },
+    {
+        id: 'rabbit',
+        label: 'Tavşan',
+        preview: '🐰',
+        moods: { excited: '🐰', happy: '🐇', neutral: '🐰', sad: '😿', pout: '😤' }
+    }
+];
+
+function getMascotCharacter(id) {
+    return MASCOT_CHARACTERS.find(c => c.id === id) || MASCOT_CHARACTERS[0];
+}
+
+function getMascotEmoji(characterId, mood) {
+    const character = getMascotCharacter(characterId);
+    return character.moods[mood] || character.moods.neutral;
+}
+
+function applyMascotCharacter() {
+    const el = document.getElementById('mascot');
+    if (!el) return;
+    const characterId = getMascotCharacter(appSettings.mascotCharacter || 'bear').id;
+    appSettings.mascotCharacter = characterId;
+    el.dataset.character = characterId;
+    const emojiEl = el.querySelector('.mascot-emoji');
+    if (emojiEl) {
+        emojiEl.textContent = getMascotEmoji(characterId, el.dataset.mood || 'neutral');
+    }
+    const label = getMascotCharacter(characterId).label;
+    el.setAttribute('aria-label', `${label} — lezzet arkadaşı`);
+}
+
+function pickMascotCharacter(id) {
+    selectedMascotCharacter = getMascotCharacter(id).id;
+    document.querySelectorAll('.mascot-option').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.mascot === selectedMascotCharacter);
+    });
+}
 
 function pickTheme(theme) {
     selectedTheme = theme;
@@ -276,6 +347,7 @@ function pickTheme(theme) {
 
 function openSettingsModal() {
     selectedTheme = appSettings.theme || 'rose';
+    selectedMascotCharacter = getMascotCharacter(appSettings.mascotCharacter || 'bear').id;
     const modal = document.getElementById('settings-modal');
     modal.classList.remove('hidden');
     const themes = APP_THEMES;
@@ -289,6 +361,13 @@ function openSettingsModal() {
             <input type="text" id="settings-name1" class="input" value="${escapeHtml(appSettings.coupleName1)}" placeholder="Ayşe"></div>
             <div><label class="label">Sevgilinin Adı</label>
             <input type="text" id="settings-name2" class="input" value="${escapeHtml(appSettings.coupleName2)}" placeholder="Mehmet"></div>
+            <div><label class="label">Lezzet arkadaşı</label>
+            <p class="settings-hint mb-2">Sürüklenebilir figür — puanlara ve istek listesine tepki verir.</p>
+            <div class="mascot-picker">${MASCOT_CHARACTERS.map(c => `
+                <button type="button" class="mascot-option ${selectedMascotCharacter === c.id ? 'active' : ''}" data-mascot="${c.id}" onclick="pickMascotCharacter('${c.id}')">
+                    <span class="mascot-option-emoji" aria-hidden="true">${c.preview}</span>${c.label}
+                </button>`).join('')}
+            </div></div>
             <div><label class="label">Tema</label>
             ${['light', 'dark'].map(group => {
                 const label = group === 'light' ? 'Açık temalar' : 'Koyu temalar';
@@ -327,7 +406,8 @@ async function saveSettings() {
     const body = {
         coupleName1: document.getElementById('settings-name1').value,
         coupleName2: document.getElementById('settings-name2').value,
-        theme: selectedTheme
+        theme: selectedTheme,
+        mascotCharacter: selectedMascotCharacter
     };
     const res = await fetch(`${API}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     appSettings = await res.json();
@@ -2500,6 +2580,7 @@ let mascotContextRestaurant = null;
 function initMascot() {
     const el = document.getElementById('mascot');
     if (!el) return;
+    applyMascotCharacter();
     restoreMascotPosition(el);
     setupMascotDrag(el);
     updateMascotMood();
@@ -2681,6 +2762,10 @@ function updateMascotMood(opts = {}) {
     const state = getMascotState({ restaurant: activeRestaurant || undefined });
     el.dataset.mood = state.mood;
     el.dataset.message = state.message;
+    const emojiEl = el.querySelector('.mascot-emoji');
+    if (emojiEl) {
+        emojiEl.textContent = getMascotEmoji(appSettings.mascotCharacter || 'bear', state.mood);
+    }
     showMascotBubble(state.message);
 }
 

@@ -37,7 +37,7 @@ function defaultUserDb() {
         restaurants: [],
         wishlist: [],
         nameRegistry: [],
-        settings: { coupleName1: '', coupleName2: '', theme: 'rose' }
+        settings: { coupleName1: '', coupleName2: '', theme: 'rose', mascotCharacter: 'bear' }
     };
 }
 

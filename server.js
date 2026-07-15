@@ -131,6 +131,7 @@ const ALLOWED_THEMES = [
     'rose', 'cherry', 'sunset', 'cream', 'lavender', 'ocean', 'sky', 'forest',
     'dark', 'cherry-dark', 'sunset-dark', 'cream-dark', 'lavender-dark', 'ocean-dark', 'sky-dark', 'forest-dark'
 ];
+const ALLOWED_MASCOTS = ['bear', 'cat', 'dog', 'penguin', 'fox', 'rabbit'];
 const clampRating = (val) => Math.min(5, Math.max(1, Math.round(Number(val) || 1)));
 
 function getRestaurantPhotos(r) {
@@ -618,22 +619,31 @@ app.get('/settings', (req, res) => {
     res.json({
         coupleName1: req.db.settings.coupleName1 || '',
         coupleName2: req.db.settings.coupleName2 || '',
-        theme: req.db.settings.theme || 'rose'
+        theme: req.db.settings.theme || 'rose',
+        mascotCharacter: ALLOWED_MASCOTS.includes(req.db.settings.mascotCharacter)
+            ? req.db.settings.mascotCharacter
+            : 'bear'
     });
 });
 
 app.patch('/settings', (req, res) => {
-    const { coupleName1, coupleName2, theme } = req.body;
+    const { coupleName1, coupleName2, theme, mascotCharacter } = req.body;
     if (coupleName1 !== undefined) req.db.settings.coupleName1 = String(coupleName1).trim();
     if (coupleName2 !== undefined) req.db.settings.coupleName2 = String(coupleName2).trim();
     if (theme !== undefined && ALLOWED_THEMES.includes(theme)) {
         req.db.settings.theme = theme;
     }
+    if (mascotCharacter !== undefined && ALLOWED_MASCOTS.includes(mascotCharacter)) {
+        req.db.settings.mascotCharacter = mascotCharacter;
+    }
     persist(req);
     res.json({
         coupleName1: req.db.settings.coupleName1,
         coupleName2: req.db.settings.coupleName2,
-        theme: req.db.settings.theme
+        theme: req.db.settings.theme,
+        mascotCharacter: ALLOWED_MASCOTS.includes(req.db.settings.mascotCharacter)
+            ? req.db.settings.mascotCharacter
+            : 'bear'
     });
 });
 
@@ -663,7 +673,10 @@ app.post('/backup/import', (req, res) => {
         req.db.settings = {
             coupleName1: data.settings.coupleName1 ?? req.db.settings.coupleName1 ?? '',
             coupleName2: data.settings.coupleName2 ?? req.db.settings.coupleName2 ?? '',
-            theme: ALLOWED_THEMES.includes(data.settings.theme) ? data.settings.theme : (req.db.settings.theme || 'rose')
+            theme: ALLOWED_THEMES.includes(data.settings.theme) ? data.settings.theme : (req.db.settings.theme || 'rose'),
+            mascotCharacter: ALLOWED_MASCOTS.includes(data.settings.mascotCharacter)
+                ? data.settings.mascotCharacter
+                : (req.db.settings.mascotCharacter || 'bear')
         };
     }
 
