@@ -1244,6 +1244,7 @@ function setStar(containerId, hiddenId, val) {
         container.classList.add('stars-max');
         setTimeout(() => container.classList.remove('stars-max'), 500);
     }
+    if (getLiveRatingFromForm()) updateMascotMood({ animate: true, showBubble: true });
 }
 
 function showToast(msg, opts = {}) {
@@ -1743,6 +1744,8 @@ function closeModal(id) {
     if (id === 'detail-modal') {
         mascotContextRestaurant = null;
         updateMascotMood();
+    } else if (id === 'edit-modal') {
+        updateMascotMood();
     }
 }
 
@@ -1966,7 +1969,7 @@ async function openRestaurantDetail(id) {
     modal.classList.remove('hidden');
     modal.innerHTML = buildDetailModalHtml(r);
     modal.onclick = e => { if (e.target === modal) closeModal('detail-modal'); };
-    updateMascotMood({ restaurant: r });
+    updateMascotMood({ restaurant: r, animate: true, showBubble: true });
 }
 
 function renderList(restaurants) {
@@ -2256,6 +2259,7 @@ function fabAddRestaurant() {
     document.getElementById('add-form-toggle').textContent = '−';
     section.scrollIntoView({ behavior: 'smooth' });
     document.getElementById('add-name')?.focus();
+    updateMascotMood({ animate: true, showBubble: true });
 }
 
 document.addEventListener('click', e => {
@@ -2400,6 +2404,7 @@ async function openEditModal(id) {
     </div>`;
     buildStarPicker('edit-my-rating', 'edit-my-rating-val', r.myRating);
     buildStarPicker('edit-partner-rating', 'edit-partner-rating-val', r.partnerRating);
+    updateMascotMood({ animate: true, showBubble: true });
     if (r.lat && r.lng) setLocationCoords('edit', r.lat, r.lng);
     modal.onclick = e => { if (e.target === modal) closeModal('edit-modal'); };
 }
@@ -2441,6 +2446,8 @@ function toggleAddForm() {
     const hidden = form.classList.toggle('hidden');
     section?.classList.toggle('add-panel-open', !hidden);
     document.getElementById('add-form-toggle').textContent = hidden ? '+' : '−';
+    if (!hidden) updateMascotMood({ animate: true, showBubble: true });
+    else updateMascotMood();
 }
 
 function setupUI() {
@@ -2525,6 +2532,44 @@ function debounce(fn, ms) {
 const MASCOT_POS_KEY = 'mascotPos';
 let mascotBubbleTimer = null;
 let mascotContextRestaurant = null;
+let mascotReactTimer = null;
+let mascotLastMood = null;
+
+function getLiveRatingFromForm() {
+    const addForm = document.getElementById('add-form');
+    if (addForm && !addForm.classList.contains('hidden')) {
+        const my = Number(document.getElementById('add-my-rating-val')?.value);
+        const partner = Number(document.getElementById('add-partner-rating-val')?.value);
+        if (my && partner) return { my, partner };
+    }
+    const editModal = document.getElementById('edit-modal');
+    if (editModal && !editModal.classList.contains('hidden')) {
+        const my = Number(document.getElementById('edit-my-rating-val')?.value);
+        const partner = Number(document.getElementById('edit-partner-rating-val')?.value);
+        if (my && partner) return { my, partner };
+    }
+    return null;
+}
+
+function getRatingPickerMood({ my, partner }) {
+    const avg = (my + partner) / 2;
+    const mood = moodFromRating(avg);
+    const messages = {
+        excited: `${avg.toFixed(1)}★ — bayıldık herhalde!`,
+        happy: `${avg.toFixed(1)}★ — güzel bir deneyim.`,
+        neutral: `${avg.toFixed(1)}★ — idare eder sayılır.`,
+        sad: `${avg.toFixed(1)}★… pek içimize sinmedi.`
+    };
+    return { mood, message: messages[mood] };
+}
+
+function triggerMascotReaction(el) {
+    el.classList.remove('mascot-react');
+    void el.offsetWidth;
+    el.classList.add('mascot-react');
+    clearTimeout(mascotReactTimer);
+    mascotReactTimer = setTimeout(() => el.classList.remove('mascot-react'), 950);
+}
 
 function initMascot() {
     const el = document.getElementById('mascot');
@@ -2599,7 +2644,7 @@ function setupMascotDrag(el) {
         el.releasePointerCapture(e.pointerId);
         el.classList.remove('mascot-dragging');
         saveMascotPosition(el);
-        if (!moved) showMascotBubble(getMascotState().message, { force: true });
+        if (!moved) showMascotBubble(getMascotIdleMessage(), { force: true });
     };
 
     el.addEventListener('pointerup', endDrag);
@@ -2656,7 +2701,7 @@ function getWishlistPoutState() {
 
 function getOverallRatingMood() {
     if (!allRestaurants.length) {
-        return { mood: 'neutral', message: 'İlk restoranı ekleyince buradayım!' };
+        return { mood: 'neutral', message: '' };
     }
     const avg = allRestaurants.reduce((s, r) => s + parseFloat(avgRating(r.myRating, r.partnerRating)), 0) / allRestaurants.length;
     const mood = moodFromRating(avg);
@@ -2682,21 +2727,34 @@ function getRestaurantMood(restaurant) {
     return { mood, message: messages[mood] };
 }
 
+function getMascotIdleMessage() {
+    const live = getLiveRatingFromForm();
+    if (live) return getRatingPickerMood(live).message;
+
+    const pout = allWishlist.length ? getWishlistPoutState() : null;
+    if (pout?.mood === 'pout') return pout.message;
+
+    if (allRestaurants.length) return getOverallRatingMood().message;
+
+    return 'Buradayım — puan verince tepki veririm.';
+}
+
 function getMascotState(opts = {}) {
+    const live = getLiveRatingFromForm();
+    if (live) return getRatingPickerMood(live);
+
     if (opts.restaurant) return getRestaurantMood(opts.restaurant);
 
     const pout = allWishlist.length ? getWishlistPoutState() : null;
 
     if (currentView === 'wishlist') {
-        if (!allWishlist.length) {
-            return { mood: 'neutral', message: 'İstek listesi boş — ekleyince heyecanlanırım!' };
-        }
+        if (!allWishlist.length) return { mood: 'neutral', message: '' };
         if (pout) return pout;
     } else if (pout?.mood === 'pout') {
         return pout;
     }
 
-    return getOverallRatingMood();
+    return { mood: 'neutral', message: '' };
 }
 
 function updateMascotMood(opts = {}) {
@@ -2711,7 +2769,14 @@ function updateMascotMood(opts = {}) {
     const state = getMascotState({ restaurant: activeRestaurant || undefined });
     el.dataset.mood = state.mood;
     el.dataset.message = state.message;
-    showMascotBubble(state.message);
+
+    if (opts.animate) triggerMascotReaction(el);
+
+    if ((opts.showBubble || opts.forceBubble) && state.message) {
+        showMascotBubble(state.message, { force: opts.forceBubble });
+    }
+
+    mascotLastMood = state.mood;
 }
 
 function showMascotBubble(text, { force = false } = {}) {

@@ -1378,11 +1378,6 @@ body.auth-pending { visibility: hidden; }
 .mascot-figure {
     transform-origin: 40px 78px;
 }
-.mascot[data-mood="neutral"] .mascot-figure { animation: mascotFloat 3.2s ease-in-out infinite; }
-.mascot[data-mood="happy"] .mascot-figure { animation: mascotHop 0.55s ease-in-out infinite; }
-.mascot[data-mood="excited"] .mascot-figure { animation: mascotCelebrate 0.38s ease-in-out infinite; }
-.mascot[data-mood="sad"] .mascot-figure { animation: mascotSigh 2.6s ease-in-out infinite; }
-.mascot[data-mood="pout"] .mascot-figure { animation: mascotSulk 1.8s ease-in-out infinite; }
 
 .mascot [class*="m-eyes-"],
 .mascot [class*="m-mouth-"],
@@ -1390,7 +1385,7 @@ body.auth-pending { visibility: hidden; }
 .mascot .m-tear,
 .mascot .m-sparkle,
 .mascot .m-steam,
-.mascot .m-dog-tongue { opacity: 0; }
+.mascot .m-dog-tongue { opacity: 0; transition: opacity 0.35s ease; }
 .mascot[data-mood="neutral"] .m-eyes-neutral,
 .mascot[data-mood="neutral"] .m-mouth-neutral { opacity: 1; }
 .mascot[data-mood="happy"] .m-eyes-happy,
@@ -1409,51 +1404,52 @@ body.auth-pending { visibility: hidden; }
 .mascot[data-character="dog"][data-mood="happy"] .m-dog-tongue,
 .mascot[data-character="dog"][data-mood="excited"] .m-dog-tongue { opacity: 1; }
 
-.m-tear-drop { animation: mascotTear 1.6s ease-in infinite; }
-.m-tear-drop-2 { animation-delay: 0.75s; }
-.m-sparkle { animation: mascotSparkle 0.55s ease-in-out infinite; }
-.m-steam { animation: mascotSteam 1.3s ease-out infinite; }
-.m-blush { animation: mascotBlush 1.2s ease-in-out infinite; }
+.mascot.mascot-react[data-mood="happy"] .mascot-figure { animation: mascotReactHappy 0.85s ease-out 1 forwards; }
+.mascot.mascot-react[data-mood="excited"] .mascot-figure { animation: mascotReactExcited 0.9s ease-out 1 forwards; }
+.mascot.mascot-react[data-mood="sad"] .mascot-figure { animation: mascotReactSad 0.85s ease-out 1 forwards; }
+.mascot.mascot-react[data-mood="pout"] .mascot-figure { animation: mascotReactPout 0.9s ease-out 1 forwards; }
+.mascot.mascot-react[data-mood="neutral"] .mascot-figure { animation: mascotReactNeutral 0.65s ease-out 1 forwards; }
 
-@keyframes mascotFloat {
+.mascot.mascot-react[data-mood="sad"] .m-tear-drop { animation: mascotTear 1.4s ease-in 1 forwards; }
+.mascot.mascot-react[data-mood="excited"] .m-sparkle { animation: mascotSparkle 0.7s ease-out 1 forwards; }
+.mascot.mascot-react[data-mood="pout"] .m-steam { animation: mascotSteam 1.1s ease-out 1 forwards; }
+
+.m-tear-drop { animation: none; }
+.m-tear-drop-2 { animation-delay: 0.4s; }
+.m-sparkle, .m-steam, .m-blush { animation: none; }
+
+@keyframes mascotReactNeutral {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-7px); }
+    50% { transform: translateY(-3px); }
 }
-@keyframes mascotHop {
-    0%, 100% { transform: translateY(0) scale(1, 1); }
-    35% { transform: translateY(-12px) scale(1.04, 0.96); }
-    55% { transform: translateY(-8px) scale(0.98, 1.02); }
+@keyframes mascotReactHappy {
+    0%, 100% { transform: translateY(0); }
+    45% { transform: translateY(-7px); }
 }
-@keyframes mascotCelebrate {
-    0%, 100% { transform: translateY(-5px) rotate(-4deg) scale(1.05); }
-    25% { transform: translateY(-10px) rotate(4deg) scale(1.08); }
-    50% { transform: translateY(-6px) rotate(-2deg) scale(1.04); }
-    75% { transform: translateY(-11px) rotate(3deg) scale(1.07); }
+@keyframes mascotReactExcited {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    30% { transform: translateY(-8px) rotate(-3deg); }
+    60% { transform: translateY(-5px) rotate(3deg); }
 }
-@keyframes mascotSigh {
-    0%, 100% { transform: translateY(0) scale(1); }
-    45% { transform: translateY(5px) scale(0.96, 1.02); }
-    55% { transform: translateY(5px) scale(0.96, 1.02); }
+@keyframes mascotReactSad {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(4px); }
 }
-@keyframes mascotSulk {
-    0%, 100% { transform: rotate(-10deg) translateX(-3px); }
-    50% { transform: rotate(-14deg) translateX(-6px) translateY(2px); }
+@keyframes mascotReactPout {
+    0%, 100% { transform: rotate(0deg); }
+    50% { transform: rotate(-8deg) translateX(-3px); }
 }
 @keyframes mascotTear {
-    0% { transform: translateY(0); opacity: 0.85; }
-    100% { transform: translateY(14px); opacity: 0; }
+    0% { transform: translateY(0); opacity: 0.8; }
+    100% { transform: translateY(12px); opacity: 0; }
 }
 @keyframes mascotSparkle {
-    0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
-    50% { transform: scale(1.25) rotate(15deg); opacity: 0.75; }
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.85; }
 }
 @keyframes mascotSteam {
-    0% { transform: translateY(0) scale(0.7); opacity: 0.75; }
-    100% { transform: translateY(-16px) scale(1.1); opacity: 0; }
-}
-@keyframes mascotBlush {
-    0%, 100% { opacity: 0.45; }
-    50% { opacity: 0.7; }
+    0% { transform: translateY(0) scale(0.8); opacity: 0.7; }
+    100% { transform: translateY(-12px) scale(1); opacity: 0; }
 }
 
 .mascot-bubble {
@@ -1534,7 +1530,6 @@ body.auth-pending { visibility: hidden; }
 .mascot-option-preview .m-dog-tongue,
 .mascot-option-preview [class*="m-eyes-"]:not(.m-eyes-neutral),
 .mascot-option-preview [class*="m-mouth-"]:not(.m-mouth-neutral) { opacity: 0 !important; }
-.mascot-option-preview .mascot-figure { animation: mascotFloat 3.2s ease-in-out infinite; }
 @media (max-width: 640px) {
     .mascot { bottom: 5.5rem; }
 }
