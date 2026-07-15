@@ -244,12 +244,36 @@ const sortRestaurants = (list, sortBy = 'rating') => {
 // --- AUTH ---
 userStore.migrateLegacyDataIfNeeded(migrateRestaurant);
 
+const DEMO_WISHLIST_ID = 'seed-ibur-zibir';
+
+function seedDemoWishlistIfNeeded(db) {
+    if (!Array.isArray(db.wishlist)) db.wishlist = [];
+    if (db.wishlist.some(w => w.id === DEMO_WISHLIST_ID)) return false;
+    const addedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    db.wishlist.push({
+        id: DEMO_WISHLIST_ID,
+        name: 'Ibır Zıbır Restoran',
+        cuisine: '',
+        location: 'Denenecekler listesi',
+        notes: 'Maskot küsmüş modu testi',
+        lat: null,
+        lng: null,
+        addedAt
+    });
+    return true;
+}
+
 function attachUserDb(req) {
     req.db = userStore.loadUserDb(req.userId);
     req.db.restaurants = (req.db.restaurants || []).map(migrateRestaurant);
     const before = JSON.stringify(req.db.nameRegistry || []);
     syncNameRegistry(req.db);
-    if (JSON.stringify(req.db.nameRegistry) !== before) {
+    let changed = JSON.stringify(req.db.nameRegistry) !== before;
+    if (seedDemoWishlistIfNeeded(req.db)) {
+        syncNameRegistry(req.db);
+        changed = true;
+    }
+    if (changed) {
         userStore.saveUserDb(req.userId, req.db);
     }
 }

@@ -1799,7 +1799,7 @@ function setView(view) {
     if (view === 'map') renderMap();
     else if (view === 'timeline') loadTimeline();
     else if (view === 'wishlist') loadWishlist();
-    updateMascotMood();
+    updateMascotMood(view === 'wishlist' ? { animate: true, showBubble: true } : undefined);
 }
 
 function createCustomIcon(type) {
