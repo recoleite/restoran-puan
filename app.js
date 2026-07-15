@@ -1935,20 +1935,6 @@ function renderCoverRatingBadge(avg, perfect) {
     </div>`;
 }
 
-function renderPlaceholderRating(avg, perfect) {
-    const stars = renderStars(Math.round(parseFloat(avg)));
-    if (perfect) {
-        return `<div class="card-rating-unit">
-            <span class="card-score-label">Mükemmel</span>
-            <div class="placeholder-rating-pill">
-                <span class="score">${avg}</span>
-                <span class="stars stars-compact">${stars}</span>
-            </div>
-        </div>`;
-    }
-    return `<span class="rating-inline">${avg} · ${stars}</span>`;
-}
-
 function renderRestaurantCard(r, index) {
     const avg = avgRating(r.myRating, r.partnerRating);
     const cover = getCoverPhoto(r);
@@ -1972,13 +1958,12 @@ function renderRestaurantCard(r, index) {
     }
 
     return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
-        <div class="card-placeholder">
-            <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn${favClass}" aria-label="Favori">♥</button>
-            <h3 class="card-placeholder-name">${escapeHtml(r.name)}</h3>
-            <div class="card-placeholder-center">
-                <span class="card-monogram" aria-hidden="true">${initial}</span>
-            </div>
-            <div class="card-placeholder-rating">${renderPlaceholderRating(avg, perfect)}</div>
+        <div class="card-placeholder${perfect ? ' has-perfect' : ''}">
+            <span class="card-placeholder-watermark" aria-hidden="true">${initial}</span>
+            <div class="card-placeholder-overlay"></div>
+            <div class="card-placeholder-info"><h3>${escapeHtml(r.name)}</h3></div>
+            <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn fav-btn-cover${favClass}" aria-label="Favori">♥</button>
+            ${renderCoverRatingBadge(avg, perfect)}
         </div>
     </article>`;
 }
