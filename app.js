@@ -2838,6 +2838,7 @@ function saveMascotPosition(el) {
 function setupMascotDrag(el) {
     let dragging = false;
     let moved = false;
+    let suppressClick = false;
     let startX = 0;
     let startY = 0;
     let startLeft = 0;
@@ -2850,6 +2851,7 @@ function setupMascotDrag(el) {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         dragging = true;
         moved = false;
+        suppressClick = false;
         el.setPointerCapture(e.pointerId);
         el.classList.add('mascot-dragging');
         const rect = el.getBoundingClientRect();
@@ -2867,7 +2869,7 @@ function setupMascotDrag(el) {
         if (!dragging) return;
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
-        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+        if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moved = true;
         const w = el.offsetWidth;
         const h = el.offsetHeight;
         const left = clamp(startLeft + dx, margin, window.innerWidth - w - margin);
@@ -2882,11 +2884,20 @@ function setupMascotDrag(el) {
         el.releasePointerCapture(e.pointerId);
         el.classList.remove('mascot-dragging');
         saveMascotPosition(el);
-        if (!moved) showMascotBubble(getMascotIdleMessage(), { force: true });
+        if (moved) suppressClick = true;
     };
 
     el.addEventListener('pointerup', endDrag);
     el.addEventListener('pointercancel', endDrag);
+
+    el.addEventListener('click', e => {
+        if (suppressClick) {
+            suppressClick = false;
+            e.preventDefault();
+            return;
+        }
+        showMascotBubble(getMascotIdleMessage(), { force: true });
+    });
 }
 
 function moodFromRating(avg) {
@@ -2969,10 +2980,22 @@ function getMascotIdleMessage() {
     const live = getLiveRatingFromForm();
     if (live) return getStarRatingMood(live.my).message;
 
+    if (currentView === 'wishlist' && allWishlist.length) {
+        const pout = getWishlistPoutState();
+        if (pout?.message) return pout.message;
+        const oldest = getOldestWishlistItem();
+        if (oldest?.name) return `"${oldest.name}" sırada bekliyor!`;
+    }
+
     const pout = allWishlist.length ? getWishlistPoutState() : null;
     if (pout?.mood === 'pout') return pout.message;
 
-    if (allRestaurants.length) return getOverallRatingMood().message;
+    if (allRestaurants.length) {
+        const overall = getOverallRatingMood().message;
+        if (overall) return overall;
+    }
+
+    if (currentView === 'chat') return 'Sohbet sekmesinden birbirinize yazabilirsiniz.';
 
     return 'Buradayım — puan verince tepki veririm.';
 }
