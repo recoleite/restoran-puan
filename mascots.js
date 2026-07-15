@@ -1,5 +1,5 @@
 /* Lezzet arkadaşı — illüstrasyon maskotlar */
-const MASCOT_ASSET_VERSION = '1.6.0';
+const MASCOT_ASSET_VERSION = '1.6.1';
 
 const MASCOT_CHARACTER_LIST = [
     { id: 'bear', label: 'Ayıcık' },

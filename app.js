@@ -1798,8 +1798,8 @@ function setView(view) {
 
     if (view === 'map') renderMap();
     else if (view === 'timeline') loadTimeline();
-    else if (view === 'wishlist') loadWishlist();
-    updateMascotMood(view === 'wishlist' ? { animate: true, showBubble: true } : undefined);
+    else if (view === 'wishlist') loadWishlist({ animate: true, showBubble: true });
+    else updateMascotMood();
 }
 
 function createCustomIcon(type) {
@@ -2015,12 +2015,12 @@ function renderTimeline(events) {
 }
 
 // --- WISHLIST ---
-async function loadWishlist() {
+async function loadWishlist(mascotOpts = {}) {
     const res = await fetch(`${API}/wishlist`);
     allWishlist = await res.json();
     renderWishlist();
     if (currentView === 'map') renderMap();
-    updateMascotMood();
+    updateMascotMood(mascotOpts);
 }
 
 function renderWishlist() {
@@ -2784,7 +2784,8 @@ function updateMascotMood(opts = {}) {
     el.dataset.mood = state.mood;
     el.dataset.message = state.message;
 
-    if (opts.animate) triggerMascotReaction(el);
+    const moodChanged = mascotLastMood !== null && mascotLastMood !== state.mood;
+    if (opts.animate || moodChanged) triggerMascotReaction(el);
 
     if ((opts.showBubble || opts.forceBubble) && state.message) {
         showMascotBubble(state.message, { force: opts.forceBubble });
