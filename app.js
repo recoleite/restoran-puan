@@ -1974,9 +1974,11 @@ function renderRestaurantCard(r, index) {
     return `<article class="restaurant-card${perfectClass}" id="card-${r.id}" style="animation-delay:${index * 0.05}s" onclick="openRestaurantDetail('${r.id}')">
         <div class="card-placeholder">
             <button type="button" onclick="event.stopPropagation();toggleFavorite('${r.id}')" class="fav-btn${favClass}" aria-label="Favori">♥</button>
-            <span class="card-monogram" aria-hidden="true">${initial}</span>
             <h3 class="card-placeholder-name">${escapeHtml(r.name)}</h3>
-            ${renderPlaceholderRating(avg, perfect)}
+            <div class="card-placeholder-center">
+                <span class="card-monogram" aria-hidden="true">${initial}</span>
+            </div>
+            <div class="card-placeholder-rating">${renderPlaceholderRating(avg, perfect)}</div>
         </div>
     </article>`;
 }
