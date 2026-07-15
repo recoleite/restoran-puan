@@ -1244,7 +1244,7 @@ function setStar(containerId, hiddenId, val) {
         container.classList.add('stars-max');
         setTimeout(() => container.classList.remove('stars-max'), 500);
     }
-    if (getLiveRatingFromForm()) updateMascotMood({ animate: true, showBubble: true });
+    if (getLiveRatingFromForm()) updateMascotMood({ animate: true, showBubble: true, starValue: val });
 }
 
 function showToast(msg, opts = {}) {
@@ -2551,16 +2551,24 @@ function getLiveRatingFromForm() {
     return null;
 }
 
-function getRatingPickerMood({ my, partner }) {
-    const avg = (my + partner) / 2;
-    const mood = moodFromRating(avg);
+function getStarRatingMood(stars) {
+    const score = Math.max(1, Math.min(5, Math.round(Number(stars))));
+    const mood = moodFromStarScore(score);
     const messages = {
-        excited: `${avg.toFixed(1)}★ — bayıldık herhalde!`,
-        happy: `${avg.toFixed(1)}★ — güzel bir deneyim.`,
-        neutral: `${avg.toFixed(1)}★ — idare eder sayılır.`,
-        sad: `${avg.toFixed(1)}★… pek içimize sinmedi.`
+        excited: `${score}★ — bayıldık herhalde!`,
+        happy: `${score}★ — güzel bir deneyim.`,
+        neutral: `${score}★ — idare eder sayılır.`,
+        sad: `${score}★… pek içimize sinmedi.`
     };
     return { mood, message: messages[mood] };
+}
+
+function moodFromStarScore(stars) {
+    const score = Math.max(1, Math.min(5, Math.round(Number(stars))));
+    if (score >= 5) return 'excited';
+    if (score >= 4) return 'happy';
+    if (score >= 3) return 'neutral';
+    return 'sad';
 }
 
 function triggerMascotReaction(el) {
@@ -2729,7 +2737,7 @@ function getRestaurantMood(restaurant) {
 
 function getMascotIdleMessage() {
     const live = getLiveRatingFromForm();
-    if (live) return getRatingPickerMood(live).message;
+    if (live) return getStarRatingMood(live.my).message;
 
     const pout = allWishlist.length ? getWishlistPoutState() : null;
     if (pout?.mood === 'pout') return pout.message;
@@ -2741,7 +2749,10 @@ function getMascotIdleMessage() {
 
 function getMascotState(opts = {}) {
     const live = getLiveRatingFromForm();
-    if (live) return getRatingPickerMood(live);
+    if (live) {
+        const stars = opts.starValue != null ? opts.starValue : live.my;
+        return getStarRatingMood(stars);
+    }
 
     if (opts.restaurant) return getRestaurantMood(opts.restaurant);
 
@@ -2766,7 +2777,10 @@ function updateMascotMood(opts = {}) {
     else if (!detailOpen) mascotContextRestaurant = null;
 
     const activeRestaurant = opts.restaurant || (detailOpen ? mascotContextRestaurant : null);
-    const state = getMascotState({ restaurant: activeRestaurant || undefined });
+    const state = getMascotState({
+        restaurant: activeRestaurant || undefined,
+        starValue: opts.starValue
+    });
     el.dataset.mood = state.mood;
     el.dataset.message = state.message;
 
