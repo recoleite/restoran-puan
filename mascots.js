@@ -1,5 +1,5 @@
 /* Lezzet arkadaşı — duygu durumlu maskot görselleri */
-const MASCOT_ASSET_VERSION = '1.8.0';
+const MASCOT_ASSET_VERSION = '1.8.1';
 
 const MASCOT_MOODS = ['neutral', 'happy', 'excited', 'sad', 'pout'];
 
