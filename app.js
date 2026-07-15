@@ -170,6 +170,7 @@ function redirectToLogin() {
 function bootApp() {
     document.body.classList.remove('auth-pending');
     setupUI();
+    initMascot();
     loadRestaurants();
     loadStats();
     loadWishlist();
@@ -931,6 +932,21 @@ function avgRating(my, partner) {
 function formatDate(d) {
     if (!d) return '—';
     return new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function formatWishlistAddedAt(addedAt) {
+    if (!addedAt) return { formatted: '—', rel: '', days: 0 };
+    const date = new Date(addedAt);
+    const formatted = date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+    const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+    let rel;
+    if (days <= 0) rel = 'Bugün eklendi';
+    else if (days === 1) rel = 'Dün eklendi';
+    else if (days < 7) rel = `${days} gün önce eklendi`;
+    else if (days < 30) rel = `${Math.floor(days / 7)} hafta önce eklendi`;
+    else if (days < 365) rel = `${Math.floor(days / 30)} ay önce eklendi`;
+    else rel = `${Math.floor(days / 365)} yıl önce eklendi`;
+    return { formatted, rel, days };
 }
 
 function renderStars(rating, variant = 'default') {
@@ -1695,6 +1711,10 @@ function pickWishlistEntry(id) {
 
 function closeModal(id) {
     document.getElementById(id).classList.add('hidden');
+    if (id === 'detail-modal') {
+        mascotContextRestaurant = null;
+        updateMascotMood();
+    }
 }
 
 // --- DASHBOARD ---
@@ -1747,6 +1767,7 @@ function setView(view) {
     if (view === 'map') renderMap();
     else if (view === 'timeline') loadTimeline();
     else if (view === 'wishlist') loadWishlist();
+    updateMascotMood();
 }
 
 function createCustomIcon(type) {
@@ -1825,6 +1846,7 @@ async function loadRestaurants() {
     renderList(allRestaurants);
     loadStats();
     if (currentView === 'map') renderMap();
+    updateMascotMood();
 }
 
 function renderVisitHistory(visits, restaurantId) {
@@ -1915,6 +1937,7 @@ async function openRestaurantDetail(id) {
     modal.classList.remove('hidden');
     modal.innerHTML = buildDetailModalHtml(r);
     modal.onclick = e => { if (e.target === modal) closeModal('detail-modal'); };
+    updateMascotMood({ restaurant: r });
 }
 
 function renderList(restaurants) {
@@ -1965,6 +1988,7 @@ async function loadWishlist() {
     allWishlist = await res.json();
     renderWishlist();
     if (currentView === 'map') renderMap();
+    updateMascotMood();
 }
 
 function renderWishlist() {
@@ -1973,18 +1997,23 @@ function renderWishlist() {
         list.innerHTML = renderEmptyState('İstek listesi boş', 'Gitmek istediğiniz restoranları buraya ekleyin.', '<button onclick="openWishlistAddModal()" class="btn-primary">İstek ekle</button>');
         return;
     }
-    list.innerHTML = allWishlist.map(w => `
-        <div class="wishlist-card">
+    list.innerHTML = allWishlist.map(w => {
+        const { formatted, rel, days } = formatWishlistAddedAt(w.addedAt);
+        const ageClass = days >= 30 ? ' wishlist-card-stale' : days >= 7 ? ' wishlist-card-aging' : '';
+        return `
+        <div class="wishlist-card${ageClass}">
             <div class="wishlist-body">
                 <p class="wishlist-name">${escapeHtml(w.name)}</p>
                 <p class="wishlist-meta">${escapeHtml(w.location || '')}</p>
+                <p class="wishlist-date">${formatted} · <span class="wishlist-date-rel">${rel}</span></p>
                 ${w.notes ? `<p class="wishlist-note">"${escapeHtml(w.notes)}"</p>` : ''}
             </div>
             <div class="wishlist-actions">
                 <button type="button" onclick="visitFromWishlist('${w.id}')" class="btn-secondary btn-sm">Gittik</button>
                 <button type="button" onclick="deleteWishlistItem('${w.id}')" class="text-link text-link-danger">Sil</button>
             </div>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 function openWishlistAddModal() {
@@ -2461,6 +2490,211 @@ async function submitAdd(e) {
 function debounce(fn, ms) {
     let t;
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+// --- MASCOT ---
+const MASCOT_POS_KEY = 'mascotPos';
+let mascotBubbleTimer = null;
+let mascotContextRestaurant = null;
+
+function initMascot() {
+    const el = document.getElementById('mascot');
+    if (!el) return;
+    restoreMascotPosition(el);
+    setupMascotDrag(el);
+    updateMascotMood();
+}
+
+function restoreMascotPosition(el) {
+    try {
+        const saved = JSON.parse(localStorage.getItem(MASCOT_POS_KEY) || 'null');
+        if (saved && typeof saved.left === 'number' && typeof saved.top === 'number') {
+            el.style.left = `${saved.left}px`;
+            el.style.top = `${saved.top}px`;
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+        }
+    } catch { /* varsayılan konum */ }
+}
+
+function saveMascotPosition(el) {
+    const rect = el.getBoundingClientRect();
+    localStorage.setItem(MASCOT_POS_KEY, JSON.stringify({ left: rect.left, top: rect.top }));
+}
+
+function setupMascotDrag(el) {
+    let dragging = false;
+    let moved = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+    const margin = 8;
+
+    const clamp = (val, min, max) => Math.max(min, Math.min(max, val));
+
+    el.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        dragging = true;
+        moved = false;
+        el.setPointerCapture(e.pointerId);
+        el.classList.add('mascot-dragging');
+        const rect = el.getBoundingClientRect();
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = rect.left;
+        startTop = rect.top;
+        el.style.left = `${startLeft}px`;
+        el.style.top = `${startTop}px`;
+        el.style.right = 'auto';
+        el.style.bottom = 'auto';
+    });
+
+    el.addEventListener('pointermove', e => {
+        if (!dragging) return;
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+        const w = el.offsetWidth;
+        const h = el.offsetHeight;
+        const left = clamp(startLeft + dx, margin, window.innerWidth - w - margin);
+        const top = clamp(startTop + dy, margin, window.innerHeight - h - margin);
+        el.style.left = `${left}px`;
+        el.style.top = `${top}px`;
+    });
+
+    const endDrag = e => {
+        if (!dragging) return;
+        dragging = false;
+        el.releasePointerCapture(e.pointerId);
+        el.classList.remove('mascot-dragging');
+        saveMascotPosition(el);
+        if (!moved) showMascotBubble(getMascotState().message, { force: true });
+    };
+
+    el.addEventListener('pointerup', endDrag);
+    el.addEventListener('pointercancel', endDrag);
+}
+
+function moodFromRating(avg) {
+    if (avg >= 4.5) return 'excited';
+    if (avg >= 3.5) return 'happy';
+    if (avg >= 2.5) return 'neutral';
+    return 'sad';
+}
+
+function getOldestWishlistItem() {
+    if (!allWishlist.length) return null;
+    return [...allWishlist]
+        .filter(w => w.addedAt)
+        .sort((a, b) => new Date(a.addedAt) - new Date(b.addedAt))[0] || null;
+}
+
+function getWishlistPoutState() {
+    const oldest = getOldestWishlistItem();
+    if (!oldest) return null;
+    const { rel, days } = formatWishlistAddedAt(oldest.addedAt);
+    if (days >= 30) {
+        return {
+            mood: 'pout',
+            message: `"${oldest.name}" ${rel}… Küsüyorum artık!`
+        };
+    }
+    if (days >= 14) {
+        return {
+            mood: 'pout',
+            message: `"${oldest.name}" ${rel}. Ne zaman gideceğiz?`
+        };
+    }
+    if (days >= 7) {
+        return {
+            mood: 'pout',
+            message: `"${oldest.name}" biraz bekledi… Küsmeye başladım.`
+        };
+    }
+    if (days >= 3) {
+        return {
+            mood: 'neutral',
+            message: `"${oldest.name}" ${rel}. Sırada o olabilir mi?`
+        };
+    }
+    return {
+        mood: 'happy',
+        message: `"${oldest.name}" taze eklendi — yakında gideriz!`
+    };
+}
+
+function getOverallRatingMood() {
+    if (!allRestaurants.length) {
+        return { mood: 'neutral', message: 'İlk restoranı ekleyince buradayım!' };
+    }
+    const avg = allRestaurants.reduce((s, r) => s + parseFloat(avgRating(r.myRating, r.partnerRating)), 0) / allRestaurants.length;
+    const mood = moodFromRating(avg);
+    const messages = {
+        excited: 'Genel ortalama muhteşem — lezzet turu başarılı!',
+        happy: 'Güzel puanlar birikmiş, devam!',
+        neutral: 'Fena değil ama daha iyisi de olur.',
+        sad: 'Ortalama düşük… Bir sonraki mekân daha iyi olsun.'
+    };
+    return { mood, message: messages[mood] };
+}
+
+function getRestaurantMood(restaurant) {
+    const avg = parseFloat(avgRating(restaurant.myRating, restaurant.partnerRating));
+    const mood = moodFromRating(avg);
+    const name = restaurant.name || 'Bu mekân';
+    const messages = {
+        excited: `${name} — ${avg}★! İkimiz de bayılmışız!`,
+        happy: `${name} ${avg}★ — güzel bir tercih.`,
+        neutral: `${name} ${avg}★ — idare eder sayılır.`,
+        sad: `${name} ${avg}★… Bu puan can sıkıcı.`
+    };
+    return { mood, message: messages[mood] };
+}
+
+function getMascotState(opts = {}) {
+    if (opts.restaurant) return getRestaurantMood(opts.restaurant);
+
+    const pout = allWishlist.length ? getWishlistPoutState() : null;
+
+    if (currentView === 'wishlist') {
+        if (!allWishlist.length) {
+            return { mood: 'neutral', message: 'İstek listesi boş — ekleyince heyecanlanırım!' };
+        }
+        if (pout) return pout;
+    } else if (pout?.mood === 'pout') {
+        return pout;
+    }
+
+    return getOverallRatingMood();
+}
+
+function updateMascotMood(opts = {}) {
+    const el = document.getElementById('mascot');
+    if (!el) return;
+
+    const detailOpen = !document.getElementById('detail-modal')?.classList.contains('hidden');
+    if (opts.restaurant) mascotContextRestaurant = opts.restaurant;
+    else if (!detailOpen) mascotContextRestaurant = null;
+
+    const activeRestaurant = opts.restaurant || (detailOpen ? mascotContextRestaurant : null);
+    const state = getMascotState({ restaurant: activeRestaurant || undefined });
+    el.dataset.mood = state.mood;
+    el.dataset.message = state.message;
+    showMascotBubble(state.message);
+}
+
+function showMascotBubble(text, { force = false } = {}) {
+    const bubble = document.getElementById('mascot-bubble');
+    if (!bubble || !text) return;
+    bubble.textContent = text;
+    bubble.classList.remove('hidden');
+    bubble.classList.add('show');
+    clearTimeout(mascotBubbleTimer);
+    mascotBubbleTimer = setTimeout(() => {
+        bubble.classList.add('hidden');
+        bubble.classList.remove('show');
+    }, force ? 3200 : 2400);
 }
 
 initApp();
