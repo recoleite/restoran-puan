@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const userStore = require('./userStore');
 const photoStore = require('./photoStore');
+const coupleChatStore = require('./coupleChatStore');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -244,36 +245,14 @@ const sortRestaurants = (list, sortBy = 'rating') => {
 // --- AUTH ---
 userStore.migrateLegacyDataIfNeeded(migrateRestaurant);
 
-const DEMO_WISHLIST_ID = 'seed-ibur-zibir';
-
-function seedDemoWishlistIfNeeded(db) {
-    if (!Array.isArray(db.wishlist)) db.wishlist = [];
-    if (db.wishlist.some(w => w.id === DEMO_WISHLIST_ID)) return false;
-    const addedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-    db.wishlist.push({
-        id: DEMO_WISHLIST_ID,
-        name: 'Ibır Zıbır Restoran',
-        cuisine: '',
-        location: 'Denenecekler listesi',
-        notes: 'Maskot küsmüş modu testi',
-        lat: null,
-        lng: null,
-        addedAt
-    });
-    return true;
-}
-
 function attachUserDb(req) {
     req.db = userStore.loadUserDb(req.userId);
     req.db.restaurants = (req.db.restaurants || []).map(migrateRestaurant);
+    if (!req.db.settings) req.db.settings = {};
+    if (!req.db.settings.coupleId) req.db.settings.coupleId = req.userId;
     const before = JSON.stringify(req.db.nameRegistry || []);
     syncNameRegistry(req.db);
-    let changed = JSON.stringify(req.db.nameRegistry) !== before;
-    if (seedDemoWishlistIfNeeded(req.db)) {
-        syncNameRegistry(req.db);
-        changed = true;
-    }
-    if (changed) {
+    if (JSON.stringify(req.db.nameRegistry) !== before) {
         userStore.saveUserDb(req.userId, req.db);
     }
 }
@@ -376,7 +355,7 @@ app.patch('/auth/password', requireAuth, (req, res) => {
     res.json({ success: true });
 });
 
-const protectedPaths = ['/stats', '/settings', '/backup', '/wishlist', '/timeline', '/names', '/restaurants', '/geocode'];
+const protectedPaths = ['/stats', '/settings', '/backup', '/wishlist', '/timeline', '/names', '/restaurants', '/geocode', '/chat', '/couple'];
 app.use((req, res, next) => {
     if (!protectedPaths.some(p => req.path === p || req.path.startsWith(`${p}/`))) return next();
     return requireAuth(req, res, next);
@@ -801,6 +780,63 @@ app.post('/wishlist/:id/visit', (req, res) => {
     syncNameRegistry(req.db);
     persist(req);
     res.status(201).json(newRestaurant);
+});
+
+// --- SOHBET ---
+app.get('/chat/messages', (req, res) => {
+    const coupleId = coupleChatStore.getCoupleId(req.db, req.userId);
+    const since = (req.query.since || '').trim();
+    const messages = coupleChatStore.listMessages(coupleId, since);
+    res.json({ coupleId, messages });
+});
+
+app.post('/chat/messages', (req, res) => {
+    const text = String(req.body.text || '').trim();
+    if (!text) return res.status(400).json({ error: 'Mesaj boş olamaz' });
+    if (text.length > 2000) return res.status(400).json({ error: 'Mesaj çok uzun' });
+
+    const authorKey = req.body.authorKey === '2' ? '2' : '1';
+    const coupleId = coupleChatStore.getCoupleId(req.db, req.userId);
+    const name1 = req.db.settings.coupleName1 || 'Sen';
+    const name2 = req.db.settings.coupleName2 || 'Sevgilin';
+    const message = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        authorKey,
+        authorName: authorKey === '2' ? name2 : name1,
+        userId: req.userId,
+        text,
+        createdAt: new Date().toISOString()
+    };
+    coupleChatStore.addMessage(coupleId, message);
+    res.status(201).json(message);
+});
+
+app.get('/couple/info', (req, res) => {
+    const coupleId = coupleChatStore.getCoupleId(req.db, req.userId);
+    res.json({
+        coupleId,
+        shareCode: coupleChatStore.shareCodeForCoupleId(coupleId),
+        isLinked: coupleId !== req.userId
+    });
+});
+
+app.post('/couple/link', (req, res) => {
+    const code = String(req.body.shareCode || '').trim();
+    const targetCoupleId = coupleChatStore.findCoupleIdByShareCode(code);
+    if (!targetCoupleId) {
+        return res.status(404).json({ error: 'Paylaşım kodu bulunamadı' });
+    }
+    if (targetCoupleId === req.userId) {
+        return res.status(400).json({ error: 'Kendi kodunuzu giremezsiniz' });
+    }
+    req.db.settings.coupleId = targetCoupleId;
+    persist(req);
+    res.json({
+        success: true,
+        coupleId: targetCoupleId,
+        shareCode: coupleChatStore.shareCodeForCoupleId(targetCoupleId),
+        isLinked: true
+    });
 });
 
 // --- ZAMAN ÇİZELGESİ ---

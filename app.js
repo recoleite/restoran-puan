@@ -30,6 +30,9 @@ let lightboxPhotos = [];
 let lightboxIndex = 0;
 let currentUser = null;
 let subtitleTimer = null;
+let chatPollTimer = null;
+let chatLastTimestamp = '';
+const CHAT_AUTHOR_KEY = 'chatAuthorKey';
 
 const FUN_TOASTS = {
     add: [
@@ -957,6 +960,15 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+function escapeAttr(str) {
+    return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 function avgRating(my, partner) {
     return ((my + partner) / 2).toFixed(1);
 }
@@ -1723,11 +1735,11 @@ function renderNamePickerList(search) {
 
     list.innerHTML = filtered.length ? filtered.map(w => `
         <div class="name-picker-row">
-            <button type="button" class="name-picker-item" onclick="pickWishlistEntry('${w.id}')">
+            <button type="button" class="name-picker-item" data-picker-pick="${escapeAttr(w.id)}">
                 <span class="name-picker-item-name">${escapeHtml(w.name)}</span>
                 ${w.location ? `<span class="name-picker-item-meta">${escapeHtml(formatLocationHint(w.location))}</span>` : ''}
             </button>
-            <button type="button" class="name-picker-remove" onclick="deleteWishlistFromPicker('${w.id}')" title="Listeden kaldır" aria-label="Kaldır">×</button>
+            <button type="button" class="name-picker-remove" data-picker-remove="${escapeAttr(w.id)}" title="Listeden kaldır" aria-label="Kaldır">×</button>
         </div>`).join('') : '<p class="name-picker-empty">İstek listesi boş — önce İstek sekmesinden mekan ekleyin</p>';
 }
 
@@ -1790,19 +1802,23 @@ function renderDashboard(s) {
 // --- GÖRÜNÜM ---
 function setView(view) {
     currentView = view;
-    ['list', 'map', 'timeline', 'wishlist'].forEach(v => {
+    ['list', 'map', 'timeline', 'wishlist', 'chat'].forEach(v => {
         document.getElementById(`view-${v}`)?.classList.toggle('active', view === v);
     });
     document.getElementById('map-container').classList.toggle('hidden', view !== 'map');
     document.getElementById('list-section').classList.toggle('hidden', view !== 'list');
     document.getElementById('timeline-section').classList.toggle('hidden', view !== 'timeline');
     document.getElementById('wishlist-section').classList.toggle('hidden', view !== 'wishlist');
-    document.getElementById('add-section').classList.toggle('hidden', view === 'timeline' || view === 'wishlist');
+    document.getElementById('chat-section').classList.toggle('hidden', view !== 'chat');
+    document.getElementById('add-section').classList.toggle('hidden', view === 'timeline' || view === 'wishlist' || view === 'chat');
 
     if (view === 'map') renderMap();
     else if (view === 'timeline') loadTimeline();
     else if (view === 'wishlist') loadWishlist({ animate: true, showBubble: true });
-    else updateMascotMood();
+    else if (view === 'chat') openChatView();
+    else stopChatPolling();
+
+    if (view !== 'chat') updateMascotMood();
 }
 
 function createCustomIcon(type) {
@@ -2044,8 +2060,8 @@ function renderWishlist() {
                 ${w.notes ? `<p class="wishlist-note">"${escapeHtml(w.notes)}"</p>` : ''}
             </div>
             <div class="wishlist-actions">
-                <button type="button" onclick="visitFromWishlist('${w.id}')" class="btn-secondary btn-sm">Gittik</button>
-                <button type="button" onclick="deleteWishlistItem('${w.id}')" class="text-link text-link-danger">Sil</button>
+                <button type="button" data-wishlist-action="visit" data-wishlist-id="${escapeAttr(w.id)}" class="btn-secondary btn-sm wishlist-btn">Gittik</button>
+                <button type="button" data-wishlist-action="delete" data-wishlist-id="${escapeAttr(w.id)}" class="btn-danger-ghost wishlist-btn">Sil</button>
             </div>
         </div>`;
     }).join('');
@@ -2090,18 +2106,27 @@ async function submitWishlist(e) {
 }
 
 async function visitFromWishlist(id) {
-    const res = await fetch(`${API}/wishlist/${id}/visit`, { method: 'POST' });
+    const res = await fetch(`${API}/wishlist/${encodeURIComponent(id)}/visit`, { method: 'POST' });
     if (res.ok) {
         showToast('Restoran eklendi — gittiniz!');
-        loadWishlist();
+        await loadWishlist();
         loadRestaurants();
         loadStats();
+        return;
     }
+    const data = await res.json().catch(() => ({}));
+    showToast(data.error || 'Eklenemedi, tekrar deneyin');
 }
 
 async function deleteWishlistItem(id, { refreshPicker = false } = {}) {
     if (!confirm('İstek listesinden silinsin mi?')) return;
-    await fetch(`${API}/wishlist/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API}/wishlist/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.error || 'Silinemedi, tekrar deneyin');
+        return;
+    }
+    showToast('İstek listesinden kaldırıldı');
     await loadWishlist();
     loadStats();
     if (refreshPicker || isNamePickerOpen()) {
@@ -2112,6 +2137,206 @@ async function deleteWishlistItem(id, { refreshPicker = false } = {}) {
 function isNamePickerOpen() {
     const modal = document.getElementById('name-picker-modal');
     return modal && !modal.classList.contains('hidden');
+}
+
+function setupDelegatedActions() {
+    document.getElementById('wishlist-list')?.addEventListener('click', e => {
+        const btn = e.target.closest('[data-wishlist-action]');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const id = btn.dataset.wishlistId;
+        const action = btn.dataset.wishlistAction;
+        if (action === 'delete') deleteWishlistItem(id);
+        else if (action === 'visit') visitFromWishlist(id);
+    });
+
+    document.getElementById('name-picker-modal')?.addEventListener('click', e => {
+        const removeBtn = e.target.closest('[data-picker-remove]');
+        if (removeBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteWishlistItem(removeBtn.dataset.pickerRemove, { refreshPicker: true });
+            return;
+        }
+        const pickBtn = e.target.closest('[data-picker-pick]');
+        if (pickBtn) {
+            e.preventDefault();
+            pickWishlistEntry(pickBtn.dataset.pickerPick);
+        }
+    });
+}
+
+// --- SOHBET ---
+function getChatAuthorKey() {
+    const stored = localStorage.getItem(CHAT_AUTHOR_KEY);
+    return stored === '2' ? '2' : '1';
+}
+
+function setChatAuthorKey(key) {
+    localStorage.setItem(CHAT_AUTHOR_KEY, key === '2' ? '2' : '1');
+    renderChatAuthorToggle();
+}
+
+function renderChatAuthorToggle() {
+    const el = document.getElementById('chat-author-toggle');
+    if (!el) return;
+    const labels = getCoupleLabels();
+    const active = getChatAuthorKey();
+    el.innerHTML = `
+        <button type="button" class="chat-author-btn ${active === '1' ? 'active' : ''}" data-chat-author="1">${escapeHtml(labels.mine)}</button>
+        <button type="button" class="chat-author-btn ${active === '2' ? 'active' : ''}" data-chat-author="2">${escapeHtml(labels.partner)}</button>`;
+    el.querySelectorAll('[data-chat-author]').forEach(btn => {
+        btn.addEventListener('click', () => setChatAuthorKey(btn.dataset.chatAuthor));
+    });
+}
+
+function formatChatTime(iso) {
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) {
+        return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderChatMessages(messages, { prepend = false } = {}) {
+    const box = document.getElementById('chat-messages');
+    if (!box) return;
+    if (!messages.length && !box.children.length) {
+        box.innerHTML = '<p class="chat-empty">Henüz mesaj yok — ilk mesajı siz yazın.</p>';
+        return;
+    }
+    const empty = box.querySelector('.chat-empty');
+    if (empty) empty.remove();
+
+    const myKey = getChatAuthorKey();
+    const html = messages.map(m => {
+        const mine = m.authorKey === myKey;
+        return `<div class="chat-bubble-row ${mine ? 'mine' : 'theirs'}">
+            <div class="chat-bubble">
+                <span class="chat-bubble-author">${escapeHtml(m.authorName)}</span>
+                <p class="chat-bubble-text">${escapeHtml(m.text)}</p>
+                <time class="chat-bubble-time">${formatChatTime(m.createdAt)}</time>
+            </div>
+        </div>`;
+    }).join('');
+
+    if (prepend) {
+        box.insertAdjacentHTML('afterbegin', html);
+    } else {
+        box.insertAdjacentHTML('beforeend', html);
+        box.scrollTop = box.scrollHeight;
+    }
+}
+
+async function loadChatMessages({ full = false } = {}) {
+    const since = full ? '' : chatLastTimestamp;
+    const res = await fetch(`${API}/chat/messages${since ? `?since=${encodeURIComponent(since)}` : ''}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const messages = data.messages || [];
+    if (full) {
+        chatLastTimestamp = '';
+        const box = document.getElementById('chat-messages');
+        if (box) box.innerHTML = '';
+    }
+    if (messages.length) {
+        renderChatMessages(messages);
+        chatLastTimestamp = messages[messages.length - 1].createdAt;
+    } else if (full) {
+        renderChatMessages([]);
+    }
+}
+
+async function loadCoupleInfo() {
+    const res = await fetch(`${API}/couple/info`);
+    if (!res.ok) return;
+    const info = await res.json();
+    const banner = document.getElementById('chat-link-banner');
+    if (!banner) return;
+    if (info.isLinked) {
+        banner.classList.add('hidden');
+        banner.innerHTML = '';
+        return;
+    }
+    banner.classList.remove('hidden');
+    banner.innerHTML = `
+        <p class="chat-link-text">Partneriniz farklı cihazdan giriyorsa paylaşım kodunuz: <strong>${escapeHtml(info.shareCode)}</strong></p>
+        <div class="chat-link-form">
+            <input type="text" id="chat-link-code" class="input" placeholder="Partner kodunu gir" maxlength="8" autocomplete="off">
+            <button type="button" id="chat-link-btn" class="btn-secondary btn-sm">Bağlan</button>
+        </div>`;
+    document.getElementById('chat-link-btn')?.addEventListener('click', linkCouplePartner);
+}
+
+async function linkCouplePartner() {
+    const code = document.getElementById('chat-link-code')?.value.trim();
+    if (!code) {
+        showToast('Paylaşım kodu girin');
+        return;
+    }
+    const res = await fetch(`${API}/couple/link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shareCode: code })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        showToast(data.error || 'Bağlantı kurulamadı');
+        return;
+    }
+    showToast('Sohbet bağlandı!');
+    chatLastTimestamp = '';
+    await loadCoupleInfo();
+    await loadChatMessages({ full: true });
+}
+
+function setupChatForm() {
+    const form = document.getElementById('chat-form');
+    if (!form) return;
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const input = document.getElementById('chat-input');
+        const text = input?.value.trim();
+        if (!text) return;
+        const res = await fetch(`${API}/chat/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, authorKey: getChatAuthorKey() })
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            showToast(data.error || 'Mesaj gönderilemedi');
+            return;
+        }
+        const msg = await res.json();
+        input.value = '';
+        renderChatMessages([msg]);
+        chatLastTimestamp = msg.createdAt;
+    });
+}
+
+function startChatPolling() {
+    stopChatPolling();
+    chatPollTimer = setInterval(() => {
+        if (currentView === 'chat') loadChatMessages();
+    }, 3000);
+}
+
+function stopChatPolling() {
+    if (chatPollTimer) {
+        clearInterval(chatPollTimer);
+        chatPollTimer = null;
+    }
+}
+
+async function openChatView() {
+    renderChatAuthorToggle();
+    await loadCoupleInfo();
+    await loadChatMessages({ full: true });
+    startChatPolling();
 }
 
 // --- ROULETTE ---
@@ -2460,6 +2685,8 @@ function setupUI() {
     buildStarPicker('add-partner-rating', 'add-partner-rating-val', 3);
     setDefaultDate();
     setupNameAutocomplete('add-name', 'add-name-suggest');
+    setupDelegatedActions();
+    setupChatForm();
 
     document.getElementById('add-photos').addEventListener('change', async e => {
         const photos = await readFilesCompressed(e.target.files);

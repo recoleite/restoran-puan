@@ -20,7 +20,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <link rel="stylesheet" href="styles.css?v=1.8.2" />
+    <link rel="stylesheet" href="styles.css?v=1.9.0" />
 </head>
 <body class="auth-pending">
     <div id="app">
@@ -43,6 +43,7 @@
                     <button type="button" id="view-map" onclick="setView('map')" class="nav-tab">Harita</button>
                     <button type="button" id="view-timeline" onclick="setView('timeline')" class="nav-tab">Anılar</button>
                     <button type="button" id="view-wishlist" onclick="setView('wishlist')" class="nav-tab">İstek</button>
+                    <button type="button" id="view-chat" onclick="setView('chat')" class="nav-tab">Sohbet</button>
                 </nav>
             </div>
         </header>
@@ -142,6 +143,19 @@
                 </div>
                 <div id="wishlist-list" class="wishlist-list"></div>
             </section>
+
+            <section id="chat-section" class="hidden">
+                <div class="section-head section-head-row">
+                    <h2 class="section-title font-display">Sohbet</h2>
+                    <div id="chat-author-toggle" class="chat-author-toggle"></div>
+                </div>
+                <div id="chat-link-banner" class="chat-link-banner hidden"></div>
+                <div id="chat-messages" class="chat-messages" aria-live="polite"></div>
+                <form id="chat-form" class="chat-form">
+                    <input type="text" id="chat-input" class="input chat-input" placeholder="Mesaj yaz..." maxlength="2000" autocomplete="off">
+                    <button type="submit" class="btn-primary chat-send">Gönder</button>
+                </form>
+            </section>
         </main>
 
         <button type="button" id="fab" onclick="openFabMenu()" class="fab" title="Hızlı ekle">+</button>
@@ -177,7 +191,7 @@
         <div class="mascot-art" id="mascot-art"></div>
     </div>
 
-    <script src="mascots.js?v=1.8.2"></script>
-    <script src="app.js?v=1.8.2"></script>
+    <script src="mascots.js?v=1.9.0"></script>
+    <script src="app.js?v=1.9.0"></script>
 </body>
 </html>
