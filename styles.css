@@ -887,7 +887,20 @@ body.auth-pending { visibility: hidden; }
 .card-cover-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(0,0,0,0.55), transparent 50%); pointer-events: none; }
 .card-cover-info { position: absolute; bottom: 10px; left: 12px; right: 58px; color: white; z-index: 2; }
 .card-cover.has-perfect .card-cover-info { right: 62px; }
-.card-cover-info h3 { font-family: 'Instrument Serif', serif; font-style: italic; font-size: 1.2rem; margin: 0; line-height: 1.2; text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+.card-cover-info h3,
+.card-placeholder-info h3 {
+    font-family: 'Instrument Serif', serif;
+    font-style: italic;
+    font-size: 1.2rem;
+    margin: 0;
+    line-height: 1.2;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.card-placeholder-info h3 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .cover-rating-badge {
     position: absolute;
     bottom: 10px;
@@ -957,17 +970,6 @@ body.auth-pending { visibility: hidden; }
     z-index: 2;
 }
 .card-placeholder.has-perfect .card-placeholder-info { right: 62px; }
-.card-placeholder-info h3 {
-    font-family: 'Instrument Serif', serif;
-    font-style: italic;
-    font-size: 1.05rem;
-    margin: 0;
-    line-height: 1.2;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 .card-placeholder .card-score-stack,
 .card-placeholder .cover-rating-badge { z-index: 2; }
 
@@ -1739,7 +1741,6 @@ body.auth-pending { visibility: hidden; }
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 0.65rem;
     }
-    .card-placeholder-info h3 { font-size: 0.92rem; }
     .card-placeholder-watermark { font-size: clamp(2.4rem, 30vw, 3.6rem); }
     .mascot { bottom: 5.5rem; }
 }
