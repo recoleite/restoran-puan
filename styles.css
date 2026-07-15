@@ -1353,64 +1353,112 @@ body.auth-pending { visibility: hidden; }
     position: fixed;
     left: 1rem;
     bottom: 1.25rem;
-    width: 62px;
-    height: 62px;
+    width: 76px;
+    height: 86px;
     z-index: 45;
     cursor: grab;
     touch-action: none;
     user-select: none;
     -webkit-user-select: none;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.18));
 }
-.mascot-dragging { cursor: grabbing; z-index: 46; }
-.mascot-dragging .mascot-body { animation: none; transform: scale(1.08); }
-.mascot-body {
+.mascot-dragging { cursor: grabbing; z-index: 46; filter: drop-shadow(0 12px 22px rgba(0,0,0,0.22)); }
+.mascot-dragging .mascot-figure { animation: none !important; transform: scale(1.08); }
+.mascot-art {
     width: 100%;
     height: 100%;
-    border-radius: 50%;
-    background: linear-gradient(160deg, #fff 0%, #f7f2ea 100%);
-    border: 2px solid color-mix(in srgb, var(--border) 70%, transparent);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.14);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
-    animation: mascotBob 3.2s ease-in-out infinite;
-}
-.mascot-emoji {
-    font-size: 2rem;
-    line-height: 1;
-    transition: transform 0.25s ease, filter 0.25s ease;
     pointer-events: none;
 }
-@keyframes mascotBob {
+.mascot-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: visible;
+}
+.mascot-figure {
+    transform-origin: 40px 78px;
+}
+.mascot[data-mood="neutral"] .mascot-figure { animation: mascotFloat 3.2s ease-in-out infinite; }
+.mascot[data-mood="happy"] .mascot-figure { animation: mascotHop 0.55s ease-in-out infinite; }
+.mascot[data-mood="excited"] .mascot-figure { animation: mascotCelebrate 0.38s ease-in-out infinite; }
+.mascot[data-mood="sad"] .mascot-figure { animation: mascotSigh 2.6s ease-in-out infinite; }
+.mascot[data-mood="pout"] .mascot-figure { animation: mascotSulk 1.8s ease-in-out infinite; }
+
+.mascot [class*="m-eyes-"],
+.mascot [class*="m-mouth-"],
+.mascot .m-blush,
+.mascot .m-tear,
+.mascot .m-sparkle,
+.mascot .m-steam,
+.mascot .m-dog-tongue { opacity: 0; }
+.mascot[data-mood="neutral"] .m-eyes-neutral,
+.mascot[data-mood="neutral"] .m-mouth-neutral { opacity: 1; }
+.mascot[data-mood="happy"] .m-eyes-happy,
+.mascot[data-mood="happy"] .m-mouth-happy,
+.mascot[data-mood="happy"] .m-blush { opacity: 1; }
+.mascot[data-mood="excited"] .m-eyes-excited,
+.mascot[data-mood="excited"] .m-mouth-excited,
+.mascot[data-mood="excited"] .m-blush,
+.mascot[data-mood="excited"] .m-sparkle { opacity: 1; }
+.mascot[data-mood="sad"] .m-eyes-sad,
+.mascot[data-mood="sad"] .m-mouth-sad,
+.mascot[data-mood="sad"] .m-tear { opacity: 1; }
+.mascot[data-mood="pout"] .m-eyes-pout,
+.mascot[data-mood="pout"] .m-mouth-pout,
+.mascot[data-mood="pout"] .m-steam { opacity: 1; }
+.mascot[data-character="dog"][data-mood="happy"] .m-dog-tongue,
+.mascot[data-character="dog"][data-mood="excited"] .m-dog-tongue { opacity: 1; }
+
+.m-tear-drop { animation: mascotTear 1.6s ease-in infinite; }
+.m-tear-drop-2 { animation-delay: 0.75s; }
+.m-sparkle { animation: mascotSparkle 0.55s ease-in-out infinite; }
+.m-steam { animation: mascotSteam 1.3s ease-out infinite; }
+.m-blush { animation: mascotBlush 1.2s ease-in-out infinite; }
+
+@keyframes mascotFloat {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
+    50% { transform: translateY(-7px); }
 }
-@keyframes mascotWiggle {
-    0%, 100% { transform: rotate(-4deg) scale(1.08); }
-    50% { transform: rotate(4deg) scale(1.12); }
+@keyframes mascotHop {
+    0%, 100% { transform: translateY(0) scale(1, 1); }
+    35% { transform: translateY(-12px) scale(1.04, 0.96); }
+    55% { transform: translateY(-8px) scale(0.98, 1.02); }
 }
-.mascot[data-mood="happy"] .mascot-emoji { transform: scale(1.08); }
-.mascot[data-mood="excited"] .mascot-body { animation: mascotBob 1.4s ease-in-out infinite; }
-.mascot[data-mood="excited"] .mascot-emoji { animation: mascotWiggle 0.45s ease-in-out infinite; }
-.mascot[data-mood="sad"] .mascot-body { animation: mascotBob 4.5s ease-in-out infinite; }
-.mascot[data-mood="sad"] .mascot-emoji { transform: scale(0.9) translateY(2px); filter: saturate(0.75); }
-.mascot[data-mood="pout"] .mascot-body { transform: rotate(-10deg); animation: none; }
-.mascot[data-mood="pout"] .mascot-emoji { transform: scale(0.96) rotate(6deg); }
-.mascot[data-character="penguin"] .mascot-body {
-    background: linear-gradient(160deg, #f8fafc 0%, #e2e8f0 100%);
+@keyframes mascotCelebrate {
+    0%, 100% { transform: translateY(-5px) rotate(-4deg) scale(1.05); }
+    25% { transform: translateY(-10px) rotate(4deg) scale(1.08); }
+    50% { transform: translateY(-6px) rotate(-2deg) scale(1.04); }
+    75% { transform: translateY(-11px) rotate(3deg) scale(1.07); }
 }
-.mascot[data-character="fox"] .mascot-body {
-    background: linear-gradient(160deg, #fff7ed 0%, #ffedd5 100%);
+@keyframes mascotSigh {
+    0%, 100% { transform: translateY(0) scale(1); }
+    45% { transform: translateY(5px) scale(0.96, 1.02); }
+    55% { transform: translateY(5px) scale(0.96, 1.02); }
 }
-.mascot[data-character="cat"] .mascot-body,
-.mascot[data-character="rabbit"] .mascot-body {
-    background: linear-gradient(160deg, #fdf4ff 0%, #fae8ff 100%);
+@keyframes mascotSulk {
+    0%, 100% { transform: rotate(-10deg) translateX(-3px); }
+    50% { transform: rotate(-14deg) translateX(-6px) translateY(2px); }
 }
+@keyframes mascotTear {
+    0% { transform: translateY(0); opacity: 0.85; }
+    100% { transform: translateY(14px); opacity: 0; }
+}
+@keyframes mascotSparkle {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    50% { transform: scale(1.25) rotate(15deg); opacity: 0.75; }
+}
+@keyframes mascotSteam {
+    0% { transform: translateY(0) scale(0.7); opacity: 0.75; }
+    100% { transform: translateY(-16px) scale(1.1); opacity: 0; }
+}
+@keyframes mascotBlush {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.7; }
+}
+
 .mascot-bubble {
     position: absolute;
-    bottom: calc(100% + 8px);
+    bottom: calc(100% + 6px);
     left: 50%;
     transform: translateX(-50%);
     min-width: 9rem;
@@ -1448,7 +1496,7 @@ body.auth-pending { visibility: hidden; }
     gap: 0.5rem;
 }
 .mascot-option {
-    padding: 0.55rem 0.25rem;
+    padding: 0.45rem 0.2rem 0.55rem;
     border-radius: var(--radius);
     border: 2px solid transparent;
     text-align: center;
@@ -1465,12 +1513,28 @@ body.auth-pending { visibility: hidden; }
     color: var(--text);
     background: color-mix(in srgb, var(--accent) 8%, var(--surface));
 }
-.mascot-option-emoji {
-    display: block;
-    font-size: 1.5rem;
-    line-height: 1.2;
-    margin-bottom: 0.15rem;
+.mascot-option-preview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 52px;
+    margin-bottom: 0.1rem;
+    pointer-events: none;
 }
+.mascot-svg-preview {
+    width: 46px;
+    height: 50px;
+}
+.mascot-option-preview .m-eyes-neutral,
+.mascot-option-preview .m-mouth-neutral { opacity: 1 !important; }
+.mascot-option-preview .m-blush,
+.mascot-option-preview .m-tear,
+.mascot-option-preview .m-sparkle,
+.mascot-option-preview .m-steam,
+.mascot-option-preview .m-dog-tongue,
+.mascot-option-preview [class*="m-eyes-"]:not(.m-eyes-neutral),
+.mascot-option-preview [class*="m-mouth-"]:not(.m-mouth-neutral) { opacity: 0 !important; }
+.mascot-option-preview .mascot-figure { animation: mascotFloat 3.2s ease-in-out infinite; }
 @media (max-width: 640px) {
     .mascot { bottom: 5.5rem; }
 }
