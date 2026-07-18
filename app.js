@@ -32,7 +32,10 @@ let currentUser = null;
 let subtitleTimer = null;
 let chatPollTimer = null;
 let chatLastTimestamp = '';
+let chatUnreadCount = 0;
 const CHAT_AUTHOR_KEY = 'chatAuthorKey';
+const CHAT_LAST_READ_KEY = 'chatLastReadAt';
+const CHAT_BASE_TITLE = 'Bizim Restoranlarımız';
 
 const FUN_TOASTS = {
     add: [
@@ -165,6 +168,7 @@ window.fetch = async (url, options = {}) => {
 
 // --- AUTH ---
 function redirectToLogin() {
+    stopChatPolling();
     localStorage.removeItem('authToken');
     localStorage.removeItem('restoranAuth');
     window.location.replace(LOGIN_URL);
@@ -177,6 +181,7 @@ function bootApp() {
     loadRestaurants();
     loadStats();
     loadWishlist();
+    initChatNotifications();
     const flash = sessionStorage.getItem('toast');
     if (flash) {
         sessionStorage.removeItem('toast');
@@ -1816,7 +1821,6 @@ function setView(view) {
     else if (view === 'timeline') loadTimeline();
     else if (view === 'wishlist') loadWishlist({ animate: true, showBubble: true });
     else if (view === 'chat') openChatView();
-    else stopChatPolling();
 
     if (view !== 'chat') updateMascotMood();
 }
@@ -2155,6 +2159,75 @@ function setupDelegatedActions() {
 }
 
 // --- SOHBET ---
+function getChatLastReadAt() {
+    return localStorage.getItem(CHAT_LAST_READ_KEY) || '';
+}
+
+function setChatLastReadAt(iso) {
+    if (iso) localStorage.setItem(CHAT_LAST_READ_KEY, iso);
+}
+
+function updateChatNavBadge() {
+    const btn = document.getElementById('view-chat');
+    if (!btn) return;
+    let badge = btn.querySelector('.nav-tab-badge');
+    if (!badge) {
+        badge = document.createElement('span');
+        badge.className = 'nav-tab-badge hidden';
+        badge.setAttribute('aria-hidden', 'true');
+        btn.appendChild(badge);
+    }
+    if (chatUnreadCount > 0) {
+        badge.textContent = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+        badge.classList.remove('hidden');
+        badge.classList.add('nav-tab-badge-pulse');
+        btn.setAttribute('aria-label', `Sohbet, ${chatUnreadCount} okunmamış mesaj`);
+    } else {
+        badge.classList.add('hidden');
+        badge.textContent = '';
+        badge.classList.remove('nav-tab-badge-pulse');
+        btn.removeAttribute('aria-label');
+    }
+    updateChatDocumentTitle();
+}
+
+function updateChatDocumentTitle() {
+    if (chatUnreadCount > 0) {
+        const label = chatUnreadCount > 9 ? '9+' : String(chatUnreadCount);
+        document.title = `(${label}) ${CHAT_BASE_TITLE}`;
+    } else {
+        document.title = CHAT_BASE_TITLE;
+    }
+}
+
+function recountChatUnread(allMessages) {
+    const lastRead = getChatLastReadAt();
+    const myKey = getChatAuthorKey();
+    chatUnreadCount = allMessages.filter(m => m.authorKey !== myKey && (!lastRead || m.createdAt > lastRead)).length;
+    updateChatNavBadge();
+}
+
+function markChatAsRead() {
+    if (chatLastTimestamp) setChatLastReadAt(chatLastTimestamp);
+    chatUnreadCount = 0;
+    updateChatNavBadge();
+}
+
+function notifyNewChatMessages(messages) {
+    if (!messages.length) return;
+    const latest = messages[messages.length - 1];
+    const preview = latest.text.length > 72 ? `${latest.text.slice(0, 69)}…` : latest.text;
+    showToast(`${latest.authorName}: ${preview}`);
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        try {
+            new Notification(`${latest.authorName} — Sohbet`, {
+                body: preview,
+                tag: 'restoran-chat'
+            });
+        } catch { /* ignore */ }
+    }
+}
+
 function getChatAuthorKey() {
     const stored = localStorage.getItem(CHAT_AUTHOR_KEY);
     return stored === '2' ? '2' : '1';
@@ -2164,10 +2237,14 @@ function setChatAuthorKey(key) {
     localStorage.setItem(CHAT_AUTHOR_KEY, key === '2' ? '2' : '1');
     renderChatAuthorToggle();
     loadCoupleInfo();
-    const box = document.getElementById('chat-messages');
-    if (box?.children.length) {
-        chatLastTimestamp = '';
-        loadChatMessages({ full: true });
+    if (currentView === 'chat') {
+        const box = document.getElementById('chat-messages');
+        if (box?.children.length) {
+            chatLastTimestamp = '';
+            loadChatMessages({ full: true });
+        }
+    } else {
+        refreshChatUnreadCount();
     }
 }
 
@@ -2230,17 +2307,44 @@ async function loadChatMessages({ full = false } = {}) {
     if (!res.ok) return;
     const data = await res.json();
     const messages = data.messages || [];
-    if (full) {
-        chatLastTimestamp = '';
-        const box = document.getElementById('chat-messages');
-        if (box) box.innerHTML = '';
+    const onChatView = currentView === 'chat';
+    const box = document.getElementById('chat-messages');
+
+    if (full && onChatView && box) box.innerHTML = '';
+
+    if (!messages.length) {
+        if (full && onChatView) renderChatMessages([]);
+        return;
     }
-    if (messages.length) {
+
+    chatLastTimestamp = messages[messages.length - 1].createdAt;
+    const partnerMessages = messages.filter(m => m.authorKey !== getChatAuthorKey());
+
+    if (onChatView) {
         renderChatMessages(messages);
-        chatLastTimestamp = messages[messages.length - 1].createdAt;
-    } else if (full) {
-        renderChatMessages([]);
+        markChatAsRead();
+        return;
     }
+
+    if (full) {
+        recountChatUnread(messages);
+        return;
+    }
+
+    if (partnerMessages.length) {
+        chatUnreadCount += partnerMessages.length;
+        updateChatNavBadge();
+        notifyNewChatMessages(partnerMessages);
+    }
+}
+
+async function refreshChatUnreadCount() {
+    const res = await fetch(`${API}/chat/messages`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const messages = data.messages || [];
+    if (messages.length) chatLastTimestamp = messages[messages.length - 1].createdAt;
+    recountChatUnread(messages);
 }
 
 async function loadCoupleInfo() {
@@ -2318,14 +2422,13 @@ function setupChatForm() {
         input.value = '';
         renderChatMessages([msg]);
         chatLastTimestamp = msg.createdAt;
+        if (currentView === 'chat') markChatAsRead();
     });
 }
 
 function startChatPolling() {
     stopChatPolling();
-    chatPollTimer = setInterval(() => {
-        if (currentView === 'chat') loadChatMessages();
-    }, 3000);
+    chatPollTimer = setInterval(() => loadChatMessages(), 3000);
 }
 
 function stopChatPolling() {
@@ -2335,11 +2438,19 @@ function stopChatPolling() {
     }
 }
 
+async function initChatNotifications() {
+    await refreshChatUnreadCount();
+    startChatPolling();
+}
+
 async function openChatView() {
     renderChatAuthorToggle();
     await loadCoupleInfo();
+    chatLastTimestamp = '';
     await loadChatMessages({ full: true });
-    startChatPolling();
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+    }
 }
 
 // --- ROULETTE ---

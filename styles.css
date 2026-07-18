@@ -728,7 +728,32 @@ body.auth-pending { visibility: hidden; }
 .header-link-muted:hover { color: #dc2626; }
 
 .nav-tabs { display: flex; gap: 0.3rem; margin-top: 1rem; padding: 0.3rem; background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border: 1px solid var(--border); border-radius: 999px; }
-.nav-tab { flex: 1; border: none; background: none; padding: 0.55rem 0.25rem; font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--text-soft); cursor: pointer; border-radius: 999px; transition: color 0.15s, background 0.15s, box-shadow 0.15s; }
+.nav-tab { flex: 1; position: relative; border: none; background: none; padding: 0.55rem 0.25rem; font: inherit; font-size: 0.78rem; font-weight: 600; color: var(--text-soft); cursor: pointer; border-radius: 999px; transition: color 0.15s, background 0.15s, box-shadow 0.15s; }
+.nav-tab-badge {
+    position: absolute;
+    top: 0.15rem;
+    right: 0.2rem;
+    min-width: 1rem;
+    height: 1rem;
+    padding: 0 0.22rem;
+    border-radius: 999px;
+    background: #ef4444;
+    color: #fff;
+    font-size: 0.58rem;
+    font-weight: 700;
+    line-height: 1rem;
+    text-align: center;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface) 88%, transparent);
+    pointer-events: none;
+}
+.nav-tab.active .nav-tab-badge {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, white);
+}
+.nav-tab-badge-pulse { animation: chatBadgePulse 1.4s ease 2; }
+@keyframes chatBadgePulse {
+    0%, 100% { transform: scale(1); }
+    45% { transform: scale(1.18); }
+}
 .nav-tab:hover { color: var(--accent); }
 .nav-tab.active { color: white; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 12px var(--accent-glow); }
 
