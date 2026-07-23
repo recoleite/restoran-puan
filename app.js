@@ -36,6 +36,7 @@ let chatUnreadCount = 0;
 const CHAT_AUTHOR_KEY = 'chatAuthorKey';
 const CHAT_LAST_READ_KEY = 'chatLastReadAt';
 const CHAT_BASE_TITLE = 'Bizim Restoranlarımız';
+const PUSH_DEVICE_KEY = 'pushDeviceId';
 
 const FUN_TOASTS = {
     add: [
@@ -182,6 +183,7 @@ function bootApp() {
     loadStats();
     loadWishlist();
     initChatNotifications();
+    if (location.hash === '#chat') setView('chat');
     const flash = sessionStorage.getItem('toast');
     if (flash) {
         sessionStorage.removeItem('toast');
@@ -2159,6 +2161,74 @@ function setupDelegatedActions() {
 }
 
 // --- SOHBET ---
+function getPushDeviceId() {
+    let id = localStorage.getItem(PUSH_DEVICE_KEY);
+    if (!id) {
+        id = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `d-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem(PUSH_DEVICE_KEY, id);
+    }
+    return id;
+}
+
+function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function registerServiceWorker() {
+    if (!('serviceWorker' in navigator)) return null;
+    try {
+        return await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    } catch {
+        return null;
+    }
+}
+
+function setupServiceWorkerMessages() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type === 'open-chat') setView('chat');
+    });
+}
+
+async function subscribeToPush() {
+    if (!('PushManager' in window) || !('Notification' in window)) return false;
+    const permission = Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission();
+    if (permission !== 'granted') return false;
+
+    const reg = await registerServiceWorker();
+    if (!reg) return false;
+
+    const keyRes = await fetch(`${API}/push/vapid-public-key`);
+    if (!keyRes.ok) return false;
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) return false;
+
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+        sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+    }
+
+    const res = await fetch(`${API}/push/subscribe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            subscription: sub.toJSON(),
+            deviceId: getPushDeviceId()
+        })
+    });
+    return res.ok;
+}
+
 function getChatLastReadAt() {
     return localStorage.getItem(CHAT_LAST_READ_KEY) || '';
 }
@@ -2411,7 +2481,7 @@ function setupChatForm() {
         const res = await fetch(`${API}/chat/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, authorKey: getChatAuthorKey() })
+            body: JSON.stringify({ text, authorKey: getChatAuthorKey(), deviceId: getPushDeviceId() })
         });
         if (!res.ok) {
             const data = await res.json().catch(() => ({}));
@@ -2439,8 +2509,13 @@ function stopChatPolling() {
 }
 
 async function initChatNotifications() {
+    setupServiceWorkerMessages();
+    await registerServiceWorker();
     await refreshChatUnreadCount();
     startChatPolling();
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadChatMessages();
+    });
 }
 
 async function openChatView() {
@@ -2448,8 +2523,13 @@ async function openChatView() {
     await loadCoupleInfo();
     chatLastTimestamp = '';
     await loadChatMessages({ full: true });
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission().catch(() => {});
+    const subscribed = await subscribeToPush();
+    if (!subscribed && 'Notification' in window && Notification.permission === 'denied') {
+        const banner = document.getElementById('chat-link-banner');
+        if (banner && !banner.querySelector('.chat-push-hint')) {
+            banner.insertAdjacentHTML('beforeend',
+                '<p class="chat-hint-text chat-push-hint">Kilit ekranı bildirimi için tarayıcı ayarlarından bildirimlere izin verin.</p>');
+        }
     }
 }
 

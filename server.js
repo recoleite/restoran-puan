@@ -5,9 +5,18 @@ const path = require('path');
 const userStore = require('./userStore');
 const photoStore = require('./photoStore');
 const coupleChatStore = require('./coupleChatStore');
+const pushStore = require('./pushStore');
+const webpush = require('web-push');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:reco@reconisa.com';
+
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
 const AUTH_COOKIE = 'authToken';
 const AUTH_MAX_AGE = 60 * 60 * 24 * 30;
 const APP_PAGE = path.join(__dirname, 'app.html');
@@ -355,7 +364,7 @@ app.patch('/auth/password', requireAuth, (req, res) => {
     res.json({ success: true });
 });
 
-const protectedPaths = ['/stats', '/settings', '/backup', '/wishlist', '/timeline', '/names', '/restaurants', '/geocode', '/chat', '/couple'];
+const protectedPaths = ['/stats', '/settings', '/backup', '/wishlist', '/timeline', '/names', '/restaurants', '/geocode', '/chat', '/couple', '/push'];
 app.use((req, res, next) => {
     if (!protectedPaths.some(p => req.path === p || req.path.startsWith(`${p}/`))) return next();
     return requireAuth(req, res, next);
@@ -808,7 +817,55 @@ app.post('/chat/messages', (req, res) => {
         createdAt: new Date().toISOString()
     };
     coupleChatStore.addMessage(coupleId, message);
+    sendChatPushNotifications(coupleId, message, req.body.deviceId);
     res.status(201).json(message);
+});
+
+function sendChatPushNotifications(coupleId, message, excludeDeviceId) {
+    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+    const preview = message.text.length > 120 ? `${message.text.slice(0, 117)}…` : message.text;
+    const payload = JSON.stringify({
+        title: `${message.authorName} — Sohbet`,
+        body: preview,
+        url: '/app.html#chat'
+    });
+    const subs = pushStore.listCoupleSubscriptions(coupleId, String(excludeDeviceId || ''));
+    for (const sub of subs) {
+        webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: sub.keys },
+            payload
+        ).catch(err => {
+            if (err.statusCode === 404 || err.statusCode === 410) {
+                pushStore.removeSubscription(sub.userId, sub.endpoint);
+            }
+        });
+    }
+}
+
+app.get('/push/vapid-public-key', (req, res) => {
+    if (!VAPID_PUBLIC_KEY) {
+        return res.status(503).json({ error: 'Push yapılandırılmamış' });
+    }
+    res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+app.post('/push/subscribe', (req, res) => {
+    const { subscription, deviceId } = req.body || {};
+    if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
+        return res.status(400).json({ error: 'Geçersiz abonelik' });
+    }
+    pushStore.upsertSubscription(req.userId, {
+        endpoint: subscription.endpoint,
+        keys: { p256dh: subscription.keys.p256dh, auth: subscription.keys.auth },
+        deviceId: String(deviceId || '')
+    });
+    res.json({ ok: true });
+});
+
+app.post('/push/unsubscribe', (req, res) => {
+    const endpoint = req.body?.endpoint;
+    if (endpoint) pushStore.removeSubscription(req.userId, endpoint);
+    res.json({ ok: true });
 });
 
 app.get('/couple/info', (req, res) => {
